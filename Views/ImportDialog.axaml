@@ -1,15 +1,15 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OutlookApp.ViewModels"
-        xmlns:models="using:OutlookApp.Models"
+        xmlns:models="using:OutlookApp.Services"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="420"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="520"
         x:Class="OutlookApp.Views.ImportDialog"
         x:Name="ThisDialog"
         x:DataType="vm:ImportDialogViewModel"
         Title="导入邮箱账号"
-        Width="520" Height="440"
+        Width="520" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         SizeToContent="Height"
         CanResize="False"
@@ -37,7 +37,7 @@
                        Margin="0,0,0,16"/>
 
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                        HorizontalAlignment="Right" Spacing="10" Margin="0,20,0,0">
+                        HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
                 <Button Content="取消"
                         Width="80" Height="34"
                         Background="#21262D"
@@ -68,12 +68,11 @@
 
                 <TextBox Text="{Binding InputText}"
                          PlaceholderText="user@outlook.com----password----client-id----token"
-                         MinHeight="70" MaxHeight="120"
+                         MinHeight="60" MaxHeight="100"
                          AcceptsReturn="True" TextWrapping="Wrap"
                          Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
                          BorderBrush="{StaticResource BorderBrush}" FontSize="13"
-                         CornerRadius="6"
-                         Padding="12,8"/>
+                         CornerRadius="6" Padding="12,8"/>
 
                 <Button Content="检测协议类型"
                         Command="{Binding DetectCommand}"
@@ -89,28 +88,43 @@
                              Foreground="{StaticResource AccentBrush}"
                              Background="{StaticResource BorderBrush}"/>
 
+                <!-- 检测日志列表 -->
+                <ItemsControl ItemsSource="{Binding DetectLogs}"
+                              IsVisible="{Binding HasDetectLogs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DetectLog">
+                            <Border Margin="0,0,0,4" CornerRadius="6" Padding="12,10"
+                                    BorderThickness="1"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    Background="{StaticResource SurfaceBrush}">
+                                <StackPanel Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="⋯" FontSize="13" Foreground="{StaticResource AccentBrush}"
+                                                   IsVisible="{Binding IsTesting}"/>
+                                        <TextBlock Text="{Binding Protocol}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="检测中…" FontSize="11" Foreground="{StaticResource AccentBrush}"
+                                                   IsVisible="{Binding IsTesting}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Message}" FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               IsVisible="{Binding IsTestingDone}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
                 <TextBlock Text="{Binding DetectStatus}"
-                           FontSize="12" Foreground="{StaticResource AccentBrush}"
-                           IsVisible="{Binding IsDetecting}"/>
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           IsVisible="{Binding HasDetectedAccount}"/>
 
                 <Border Background="#1C2533" CornerRadius="8"
                         Padding="14,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                         IsVisible="{Binding HasErrorMessage}">
                     <TextBlock Text="{Binding ErrorMessage}" FontSize="12"
                                Foreground="{StaticResource DangerBrush}"/>
-                </Border>
-
-                <Border Background="#1C2533" CornerRadius="8"
-                        Padding="14,12" BorderBrush="#3FB950" BorderThickness="1"
-                        IsVisible="{Binding HasDetectedAccount}">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="检测结果" FontSize="12" FontWeight="Bold"
-                                   Foreground="{StaticResource SuccessBrush}"/>
-                        <TextBlock Text="{Binding DetectedAccount.Email}" FontSize="13"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <TextBlock Text="{Binding DetectedAccount.StatusMessage}" FontSize="12"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
                 </Border>
             </StackPanel>
         </DockPanel>

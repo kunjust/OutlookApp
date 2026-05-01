@@ -1,4 +1,6 @@
 using System;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -29,6 +31,9 @@ public partial class ImportDialogViewModel : ViewModelBase
     [ObservableProperty]
     private string? _errorMessage;
 
+    [ObservableProperty]
+    private ObservableCollection<DetectLog> _detectLogs = new();
+
     public ImportDialogViewModel()
     {
         _detector = new AuthDetectService();
@@ -36,6 +41,7 @@ public partial class ImportDialogViewModel : ViewModelBase
 
     public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasDetectedAccount => DetectedAccount != null;
+    public bool HasDetectLogs => DetectLogs.Count > 0;
 
     [RelayCommand]
     private async Task Detect()
@@ -49,6 +55,7 @@ public partial class ImportDialogViewModel : ViewModelBase
         ErrorMessage = null;
         DetectedAccount = null;
         CanImport = false;
+        DetectLogs.Clear();
 
         var parts = InputText.Split("----");
         if (parts.Length < 2)
@@ -75,6 +82,10 @@ public partial class ImportDialogViewModel : ViewModelBase
         CanImport = false;
 
         var result = await _detector.DetectAsync(account);
+
+        foreach (var log in result.LogMessages)
+            DetectLogs.Add(log);
+
         account.Status = result.Success ? "Verified" : "Failed";
         account.StatusMessage = result.StatusMessage;
         account.AuthType = result.AuthType;
@@ -83,6 +94,7 @@ public partial class ImportDialogViewModel : ViewModelBase
         CanImport = result.Success;
         DetectStatus = result.StatusMessage;
         OnPropertyChanged(nameof(DetectedAccount));
+        OnPropertyChanged(nameof(HasDetectLogs));
     }
 
     [RelayCommand]
