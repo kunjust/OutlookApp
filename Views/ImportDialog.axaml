@@ -1,0 +1,87 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OutlookApp.ViewModels"
+        xmlns:models="using:OutlookApp.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="350"
+        x:Class="OutlookApp.Views.ImportDialog"
+        x:Name="ThisDialog"
+        x:DataType="vm:ImportDialogViewModel"
+        Title="Import Account"
+        Width="500" Height="350"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="Height"
+        CanResize="False">
+
+    <Design.DataContext>
+        <vm:ImportDialogViewModel/>
+    </Design.DataContext>
+
+    <Border Padding="20">
+        <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top" Text="Import Outlook Account"
+                       FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                        HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+                <Button Content="Cancel"
+                        Width="80"
+                        Click="OnCancelClick"/>
+                <Button Content="Import"
+                        Width="80"
+                        Command="{Binding ConfirmImportCommand}"
+                        IsEnabled="{Binding CanImport}"
+                        Click="OnImportClick"
+                        FontWeight="Bold"/>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Paste account info below:"
+                           FontSize="13"/>
+                <TextBlock Text="Format: email----password----clientid----token"
+                           FontSize="11"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+                <TextBox Text="{Binding InputText}"
+                         PlaceholderText="user@outlook.com----password----client-id----token"
+                         MinHeight="60"
+                         MaxHeight="120"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         FontSize="12"/>
+
+                <Button Content="Detect Protocol"
+                        Command="{Binding DetectCommand}"
+                        HorizontalAlignment="Left"
+                        Padding="12,6"/>
+
+                <ProgressBar IsVisible="{Binding IsDetecting}"
+                             IsIndeterminate="True"
+                             Height="4"/>
+
+                <TextBlock Text="{Binding DetectStatus}"
+                           FontSize="12"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           IsVisible="{Binding IsDetecting}"/>
+
+                <TextBlock Text="{Binding ErrorMessage}"
+                           FontSize="12"
+                           Foreground="Red"
+                           IsVisible="{Binding HasErrorMessage}"/>
+
+                <Border Background="{DynamicResource SystemControlPageChromeLowBrush}"
+                        Padding="12,8"
+                        CornerRadius="4"
+                        IsVisible="{Binding HasDetectedAccount}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Detection Result:" FontSize="12" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding DetectedAccount.Email}" FontSize="12"/>
+                        <TextBlock Text="{Binding DetectedAccount.StatusMessage}" FontSize="12"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</Window>
