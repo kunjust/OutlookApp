@@ -160,18 +160,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            List<EmailMessage> messages;
-            if (account.AuthType == "graph")
+            List<EmailMessage> messages = new();
+            var accessToken = await _graphService.RefreshTokenAsync(account);
+            if (!string.IsNullOrEmpty(accessToken))
             {
-                messages = await _graphService.FetchEmailsAsync(account, 50);
+                messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 50);
             }
-            else
+            else if (!string.IsNullOrEmpty(account.Password))
             {
-                var accessToken = await _graphService.RefreshTokenAsync(account);
-                if (!string.IsNullOrEmpty(accessToken))
-                    messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 50);
-                else
-                    messages = await _imapService.FetchByPasswordAsync(account, 50);
+                messages = await _imapService.FetchByPasswordAsync(account, 50);
             }
             _db.DeleteMessages(account.Id);
             _db.SaveMessages(account.Id, messages);
