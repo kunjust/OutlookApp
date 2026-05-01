@@ -1,15 +1,21 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OutlookApp.Models;
+using OutlookApp.Services;
 
 namespace OutlookApp.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    private readonly DatabaseService _db;
+    private readonly AuthDetectService _detector;
+    private readonly ImapEmailService _imapService;
+    private readonly GraphEmailService _graphService;
+
     [ObservableProperty]
     private ObservableCollection<EmailAccount> _accounts = new();
 
@@ -29,43 +35,26 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isLoading;
 
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = "就绪";
 
     public MainWindowViewModel()
     {
-        LoadSampleData();
+        _db = new DatabaseService();
+        _detector = new AuthDetectService();
+        _imapService = new ImapEmailService();
+        _graphService = new GraphEmailService();
+        LoadAccounts();
     }
 
     public bool HasSelectedEmail => SelectedEmail != null;
     public bool HasSelectedAccount => SelectedAccount != null;
     public bool HasNoSelectedAccount => SelectedAccount == null;
 
-    private void LoadSampleData()
+    private void LoadAccounts()
     {
-        Accounts.Add(new EmailAccount
-        {
-            Id = 1,
-            Email = "user1@outlook.com",
-            Status = "Verified",
-            StatusMessage = "IMAP connected",
-            AuthType = "imap"
-        });
-        Accounts.Add(new EmailAccount
-        {
-            Id = 2,
-            Email = "user2@outlook.com",
-            Status = "Verified",
-            StatusMessage = "Graph API connected",
-            AuthType = "graph"
-        });
-        Accounts.Add(new EmailAccount
-        {
-            Id = 3,
-            Email = "user3@outlook.com",
-            Status = "Failed",
-            StatusMessage = "Token expired",
-            AuthType = "graph"
-        });
+        Accounts.Clear();
+        foreach (var acc in _db.GetAccounts())
+            Accounts.Add(acc);
     }
 
     [RelayCommand]
@@ -73,67 +62,63 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var dialog = new Views.ImportDialog();
         var result = await dialog.ShowDialog<EmailAccount?>(App.MainWindow);
-        if (result != null)
-        {
-            Accounts.Add(result);
-            StatusText = $"Account {result.Email} imported, detecting protocol...";
-            await Task.Delay(1500);
-            result.Status = "Verified";
-            result.StatusMessage = "Auto-detected: IMAP";
-            result.AuthType = "imap";
-            OnPropertyChanged(nameof(result.Status));
-            OnPropertyChanged(nameof(result.DisplayStatus));
-            StatusText = "Ready";
-        }
+        if (result == null) return;
+
+        StatusText = $"正在检测 {result.Email} 的协议...";
+        var detectResult = await _detector.DetectAsync(result);
+
+        result.Status = detectResult.Success ? "Verified" : "Failed";
+        result.StatusMessage = detectResult.StatusMessage;
+        result.AuthType = detectResult.AuthType;
+        result.Id = _db.SaveAccount(result);
+
+        Accounts.Insert(0, result);
+        StatusText = detectResult.Success
+            ? $"{result.Email} 导入成功 ({detectResult.StatusMessage})"
+            : $"{result.Email} 导入失败 ({detectResult.StatusMessage})";
     }
 
     [RelayCommand]
     private void CopyEmail(EmailAccount account)
     {
         if (account == null) return;
-        StatusText = $"Email copied: {account.Email}";
+        StatusText = $"已复制: {account.Email}";
     }
 
     [RelayCommand]
     private void DeleteAccount(EmailAccount account)
     {
         if (account == null) return;
+        _db.DeleteAccount(account.Id);
         Accounts.Remove(account);
         if (SelectedAccount == account)
         {
             SelectedAccount = null;
             Emails.Clear();
         }
-        StatusText = $"Account {account.Email} deleted";
+        StatusText = $"已删除账号: {account.Email}";
     }
 
     [RelayCommand]
     private async Task RefreshAccount(EmailAccount account)
     {
         if (account == null) return;
-        StatusText = $"Refreshing {account.Email}...";
-        IsLoading = true;
-        await Task.Delay(2000);
-        if (SelectedAccount == account)
-        {
-            LoadSampleEmails();
-        }
-        IsLoading = false;
-        StatusText = "Ready";
+        await FetchEmailsForAccount(account);
     }
 
     [RelayCommand]
     private async Task RefreshAll()
     {
-        StatusText = "Refreshing all accounts...";
+        StatusText = "正在刷新全部账号...";
         IsLoading = true;
-        await Task.Delay(3000);
-        if (SelectedAccount != null)
+        foreach (var acc in Accounts.ToList())
         {
-            LoadSampleEmails();
+            if (acc.Status != "Verified") continue;
+            if (SelectedAccount == acc)
+                await FetchEmailsForAccount(acc);
         }
         IsLoading = false;
-        StatusText = "Ready";
+        StatusText = "全部刷新完成";
     }
 
     partial void OnSelectedAccountChanged(EmailAccount? value)
@@ -144,9 +129,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoSelectedAccount));
         if (value != null)
         {
-            StatusText = $"Loading emails for {value.Email}...";
-            LoadSampleEmails();
-            StatusText = "Ready";
+            _ = FetchEmailsForAccount(value);
         }
     }
 
@@ -157,45 +140,43 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSearchTextChanged(string value)
     {
+        if (SelectedAccount == null) return;
+        var allEmails = _db.GetMessages(SelectedAccount.Id);
+        var filtered = string.IsNullOrWhiteSpace(value)
+            ? allEmails
+            : allEmails.Where(m =>
+                m.Subject.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                m.From.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+        Emails.Clear();
+        foreach (var m in filtered)
+            Emails.Add(m);
     }
 
-    private void LoadSampleEmails()
+    private async Task FetchEmailsForAccount(EmailAccount account)
     {
-        Emails.Add(new EmailMessage
+        StatusText = $"正在获取 {account.Email} 的邮件...";
+        IsLoading = true;
+
+        try
         {
-            Id = "1",
-            Subject = "Welcome to OutlookApp",
-            From = "support@outlook.com",
-            To = SelectedAccount?.Email ?? "",
-            Body = "Hello,\n\nThank you for using OutlookApp. This is a sample email to demonstrate the UI layout.\n\nBest regards,\nOutlookApp Team",
-            BodyPreview = "Thank you for using OutlookApp. This is a sample email...",
-            ReceivedTime = DateTime.Now.AddHours(-1),
-            HasAttachments = false,
-            IsRead = false
-        });
-        Emails.Add(new EmailMessage
+            IEmailService service = account.AuthType == "graph"
+                ? _graphService
+                : _imapService;
+
+            var messages = await service.FetchEmailsAsync(account, 50);
+            _db.DeleteMessages(account.Id);
+            _db.SaveMessages(account.Id, messages);
+        }
+        catch
         {
-            Id = "2",
-            Subject = "Meeting: Project Review",
-            From = "manager@company.com",
-            To = SelectedAccount?.Email ?? "",
-            Body = "Hi team,\n\nWe have a project review meeting scheduled for tomorrow at 10:00 AM.\n\nPlease come prepared with your updates.\n\nRegards,\nManager",
-            BodyPreview = "We have a project review meeting scheduled for tomorrow...",
-            ReceivedTime = DateTime.Now.AddHours(-3),
-            HasAttachments = true,
-            IsRead = true
-        });
-        Emails.Add(new EmailMessage
-        {
-            Id = "3",
-            Subject = "Quarterly Report",
-            From = "reports@company.com",
-            To = SelectedAccount?.Email ?? "",
-            Body = "Attached is the quarterly report for Q1 2026.\n\nPlease review and provide feedback by end of week.",
-            BodyPreview = "Attached is the quarterly report for Q1 2026...",
-            ReceivedTime = DateTime.Now.AddDays(-1),
-            HasAttachments = true,
-            IsRead = false
-        });
+        }
+
+        var dbMessages = _db.GetMessages(account.Id);
+        Emails.Clear();
+        foreach (var m in dbMessages)
+            Emails.Add(m);
+
+        IsLoading = false;
+        StatusText = $"共 {Emails.Count} 封邮件";
     }
 }

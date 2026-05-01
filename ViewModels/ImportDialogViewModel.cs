@@ -3,11 +3,14 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OutlookApp.Models;
+using OutlookApp.Services;
 
 namespace OutlookApp.ViewModels;
 
 public partial class ImportDialogViewModel : ViewModelBase
 {
+    private readonly AuthDetectService _detector;
+
     [ObservableProperty]
     private string _inputText = string.Empty;
 
@@ -26,12 +29,20 @@ public partial class ImportDialogViewModel : ViewModelBase
     [ObservableProperty]
     private string? _errorMessage;
 
+    public ImportDialogViewModel()
+    {
+        _detector = new AuthDetectService();
+    }
+
+    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
+    public bool HasDetectedAccount => DetectedAccount != null;
+
     [RelayCommand]
     private async Task Detect()
     {
         if (string.IsNullOrWhiteSpace(InputText))
         {
-            ErrorMessage = "Please enter account info";
+            ErrorMessage = "请输入账号信息";
             return;
         }
 
@@ -42,7 +53,7 @@ public partial class ImportDialogViewModel : ViewModelBase
         var parts = InputText.Split("----");
         if (parts.Length < 2)
         {
-            ErrorMessage = "Invalid format. Expected: email----password----clientid----token";
+            ErrorMessage = "格式错误，请使用: 邮箱----密码----clientid----token";
             return;
         }
 
@@ -61,30 +72,16 @@ public partial class ImportDialogViewModel : ViewModelBase
 
         IsDetecting = true;
         DetectedAccount = account;
-        DetectStatus = "Detecting IMAP...";
+        CanImport = false;
 
-        await Task.Delay(1000);
-
-        DetectStatus = "IMAP unavailable, trying Graph API...";
-        await Task.Delay(1000);
-
-        if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(token))
-        {
-            DetectStatus = "Graph API connected!";
-            account.Status = "Verified";
-            account.StatusMessage = "Auto-detected: Graph API";
-            account.AuthType = "graph";
-        }
-        else
-        {
-            DetectStatus = "IMAP connected!";
-            account.Status = "Verified";
-            account.StatusMessage = "Auto-detected: IMAP";
-            account.AuthType = "imap";
-        }
+        var result = await _detector.DetectAsync(account);
+        account.Status = result.Success ? "Verified" : "Failed";
+        account.StatusMessage = result.StatusMessage;
+        account.AuthType = result.AuthType;
 
         IsDetecting = false;
-        CanImport = true;
+        CanImport = result.Success;
+        DetectStatus = result.StatusMessage;
         OnPropertyChanged(nameof(DetectedAccount));
     }
 
@@ -92,9 +89,6 @@ public partial class ImportDialogViewModel : ViewModelBase
     private void ConfirmImport()
     {
     }
-
-    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
-    public bool HasDetectedAccount => DetectedAccount != null;
 
     partial void OnErrorMessageChanged(string? value)
     {
