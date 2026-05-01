@@ -1,15 +1,14 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OutlookApp.ViewModels"
-        xmlns:models="using:OutlookApp.Services"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="520"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="600"
         x:Class="OutlookApp.Views.ImportDialog"
         x:Name="ThisDialog"
         x:DataType="vm:ImportDialogViewModel"
         Title="导入邮箱账号"
-        Width="520" MinHeight="480"
+        Width="560" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         SizeToContent="Height"
         CanResize="False"
@@ -23,6 +22,7 @@
         <SolidColorBrush x:Key="DangerBrush">#F85149</SolidColorBrush>
         <SolidColorBrush x:Key="TextPrimaryBrush">#E6EDF3</SolidColorBrush>
         <SolidColorBrush x:Key="TextSecondaryBrush">#8B949E</SolidColorBrush>
+        <SolidColorBrush x:Key="BtnBgBrush">#21262D</SolidColorBrush>
     </Window.Resources>
 
     <Design.DataContext>
@@ -31,23 +31,30 @@
 
     <Border Padding="24">
         <DockPanel LastChildFill="True">
-            <TextBlock DockPanel.Dock="Top" Text="导入邮箱账号"
+            <TextBlock DockPanel.Dock="Top" Text="批量导入邮箱账号"
                        FontSize="18" FontWeight="Bold"
                        Foreground="{StaticResource TextPrimaryBrush}"
-                       Margin="0,0,0,16"/>
+                       Margin="0,0,0,4"/>
+            <TextBlock DockPanel.Dock="Top" Text="一行一个账号，每行 4 项用 ---- 分隔"
+                       FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                       Margin="0,0,0,14"/>
 
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                        HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
+                        HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
+                <TextBlock FontSize="12" Foreground="{StaticResource SuccessBrush}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding HasResults}">
+                    <Run Text="{Binding SuccessCount}"/> <Run Text="个检测通过，共"/> <Run Text="{Binding TotalCount}"/> <Run Text="个"/>
+                </TextBlock>
                 <Button Content="取消"
                         Width="80" Height="34"
-                        Background="#21262D"
+                        Background="{StaticResource BtnBgBrush}"
                         Foreground="{StaticResource TextPrimaryBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
                         Click="OnCancelClick"/>
-                <Button Content="确认导入"
+                <Button Content="导入选中"
                         Width="100" Height="34"
-                        Command="{Binding ConfirmImportCommand}"
-                        IsEnabled="{Binding CanImport}"
+                        IsEnabled="{Binding HasResults}"
                         Click="OnImportClick"
                         Background="{StaticResource AccentBrush}"
                         Foreground="White"
@@ -56,69 +63,74 @@
             </StackPanel>
 
             <StackPanel Spacing="10">
-                <Border Background="{StaticResource SurfaceBrush}" CornerRadius="8"
-                        Padding="14,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="粘贴账号信息" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <TextBlock Text="格式：邮箱----密码----clientid----token"
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
-                </Border>
-
-                <TextBox Text="{Binding InputText}"
-                         PlaceholderText="user@outlook.com----password----client-id----token"
-                         MinHeight="60" MaxHeight="100"
-                         AcceptsReturn="True" TextWrapping="Wrap"
-                         Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
-                         BorderBrush="{StaticResource BorderBrush}" FontSize="13"
-                         CornerRadius="6" Padding="12,8"/>
-
-                <Button Content="检测协议类型"
-                        Command="{Binding DetectCommand}"
-                        HorizontalAlignment="Left"
-                        Background="#21262D"
+                <Button Content="📁 选择文件"
+                        Command="{Binding SelectFileCommand}"
+                        Background="{StaticResource BtnBgBrush}"
                         Foreground="{StaticResource TextPrimaryBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
-                        Height="32" Padding="14,0"
-                        FontSize="13"/>
+                        Height="32" Padding="14,0" FontSize="13"
+                        HorizontalAlignment="Left"/>
+
+                <TextBox Text="{Binding InputText}"
+                         PlaceholderText="user1@outlook.com----password1----client1----token1&#xa;user2@outlook.com----password2----client2----token2"
+                         MinHeight="80" MaxHeight="140"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BorderBrush}" FontSize="12"
+                         CornerRadius="6" Padding="12,8"/>
+
+                <Button Content="▶ 开始批量检测"
+                        Command="{Binding BatchDetectCommand}"
+                        Background="{StaticResource AccentBrush}"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Height="36" FontSize="14" FontWeight="Bold"
+                        HorizontalAlignment="Stretch"/>
 
                 <ProgressBar IsVisible="{Binding IsDetecting}"
                              IsIndeterminate="True" Height="3"
                              Foreground="{StaticResource AccentBrush}"
                              Background="{StaticResource BorderBrush}"/>
 
-                <!-- 检测日志列表 -->
-                <ItemsControl ItemsSource="{Binding DetectLogs}"
-                              IsVisible="{Binding HasDetectLogs}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:DetectLog">
-                            <Border Margin="0,0,0,4" CornerRadius="6" Padding="12,10"
-                                    BorderThickness="1"
-                                    BorderBrush="{StaticResource BorderBrush}"
-                                    Background="{StaticResource SurfaceBrush}">
-                                <StackPanel Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="⋯" FontSize="13" Foreground="{StaticResource AccentBrush}"
-                                                   IsVisible="{Binding IsTesting}"/>
-                                        <TextBlock Text="{Binding Protocol}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                                        <TextBlock Text="检测中…" FontSize="11" Foreground="{StaticResource AccentBrush}"
-                                                   IsVisible="{Binding IsTesting}"/>
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding Message}" FontSize="11"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               IsVisible="{Binding IsTestingDone}"/>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <TextBlock FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                           IsVisible="{Binding IsDetecting}">
+                    <Run Text="正在检测第"/> <Run Text="{Binding CurrentIndex}"/> <Run Text="个，共"/> <Run Text="{Binding TotalCount}"/> <Run Text="个"/>
+                </TextBlock>
 
-                <TextBlock Text="{Binding DetectStatus}"
-                           FontSize="12"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           IsVisible="{Binding HasDetectedAccount}"/>
+                <ScrollViewer MaxHeight="220" IsVisible="{Binding HasResults}">
+                    <ItemsControl ItemsSource="{Binding AccountResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AccountDetectResult">
+                                <Border Margin="0,0,0,3" CornerRadius="6" Padding="10,8"
+                                        BorderThickness="1"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        Background="{StaticResource SurfaceBrush}">
+                                    <Grid ColumnDefinitions="20,*,Auto">
+                                        <TextBlock Grid.Column="0" FontSize="13" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center" Text="{Binding Icon}">
+                                            <TextBlock.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                </Style>
+                                            </TextBlock.Styles>
+                                        </TextBlock>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Email}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding StatusMessage}" FontSize="10"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" FontSize="11" VerticalAlignment="Center"
+                                                   Text="{Binding Status}"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <Border Background="#1C2533" CornerRadius="8"
                         Padding="14,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"

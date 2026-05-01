@@ -62,21 +62,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task ImportAccount()
     {
         var dialog = new Views.ImportDialog();
-        var result = await dialog.ShowDialog<EmailAccount?>(App.MainWindow);
-        if (result == null) return;
+        var result = await dialog.ShowDialog<List<EmailAccount>?>(App.MainWindow);
+        if (result == null || result.Count == 0) return;
 
-        StatusText = $"正在检测 {result.Email} 的协议...";
-        var detectResult = await _detector.DetectAsync(result);
+        var success = 0;
+        foreach (var account in result)
+        {
+            account.Id = _db.SaveAccount(account);
+            Accounts.Insert(0, account);
+            success++;
+        }
 
-        result.Status = detectResult.Success ? "Verified" : "Failed";
-        result.StatusMessage = detectResult.StatusMessage;
-        result.AuthType = detectResult.AuthType;
-        result.Id = _db.SaveAccount(result);
-
-        Accounts.Insert(0, result);
-        StatusText = detectResult.Success
-            ? $"{result.Email} 导入成功 ({detectResult.StatusMessage})"
-            : $"{result.Email} 导入失败 ({detectResult.StatusMessage})";
+        StatusText = $"成功导入 {success} 个账号";
     }
 
     [RelayCommand]
