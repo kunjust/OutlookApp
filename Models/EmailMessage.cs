@@ -33,6 +33,7 @@ public partial class EmailMessage : ObservableObject
     private bool _isRead;
 
     public string DisplayDate => ReceivedTime.ToString("yyyy-MM-dd HH:mm");
+    public bool IsUnread => !IsRead;
 
     public string DisplayPreview => string.IsNullOrEmpty(BodyPreview)
         ? "(No preview)"

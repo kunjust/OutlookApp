@@ -38,6 +38,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasSelectedEmail => SelectedEmail != null;
     public bool HasSelectedAccount => SelectedAccount != null;
+    public bool HasNoSelectedAccount => SelectedAccount == null;
 
     private void LoadSampleData()
     {
@@ -140,6 +141,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Emails.Clear();
         SelectedEmail = null;
         OnPropertyChanged(nameof(HasSelectedAccount));
+        OnPropertyChanged(nameof(HasNoSelectedAccount));
         if (value != null)
         {
             StatusText = $"Loading emails for {value.Email}...";
