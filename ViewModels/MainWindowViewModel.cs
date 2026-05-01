@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -159,11 +160,19 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            IEmailService service = account.AuthType == "graph"
-                ? _graphService
-                : _imapService;
-
-            var messages = await service.FetchEmailsAsync(account, 50);
+            List<EmailMessage> messages;
+            if (account.AuthType == "graph")
+            {
+                messages = await _graphService.FetchEmailsAsync(account, 50);
+            }
+            else
+            {
+                var accessToken = await _graphService.RefreshTokenAsync(account);
+                if (!string.IsNullOrEmpty(accessToken))
+                    messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 50);
+                else
+                    messages = await _imapService.FetchByPasswordAsync(account, 50);
+            }
             _db.DeleteMessages(account.Id);
             _db.SaveMessages(account.Id, messages);
         }

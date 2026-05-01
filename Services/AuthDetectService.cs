@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using OutlookApp.Models;
@@ -6,100 +7,101 @@ namespace OutlookApp.Services;
 
 public class AuthDetectService
 {
-    private readonly ImapEmailService _imapService;
-    private readonly GraphEmailService _graphService;
+    private readonly ImapEmailService _imap;
+    private readonly GraphEmailService _graph;
 
     public AuthDetectService()
     {
-        _imapService = new ImapEmailService();
-        _graphService = new GraphEmailService();
+        _imap = new ImapEmailService();
+        _graph = new GraphEmailService();
     }
 
     public async Task<DetectionResult> DetectAsync(EmailAccount account)
     {
         var result = new DetectionResult();
-        var tasks = new List<ProtocolTask>();
+        var logs = new List<DetectLog>();
 
+        // 1. IMAP + 密码
         if (!string.IsNullOrEmpty(account.Password))
         {
-            tasks.Add(new ProtocolTask
+            logs.Add(new DetectLog { Protocol = "IMAP (密码)", IsTesting = true });
+            await Task.Delay(300);
+            try
             {
-                Name = "IMAP (密码)",
-                IsAvailable = true,
-                TestFunc = async () =>
-                {
-                    try
-                    {
-                        var ok = await _imapService.VerifyAsync(account);
-                        return (ok, ok ? "IMAP 密码验证成功" : "IMAP 密码验证失败");
-                    }
-                    catch { return (false, "IMAP 连接异常"); }
-                }
-            });
+                var ok = await _imap.VerifyAsync(account);
+                logs[^1] = new DetectLog { Protocol = "IMAP (密码)", IsTesting = false, Success = ok, Message = ok ? "连接成功" : "密码错误或 IMAP 被禁用" };
+            }
+            catch (Exception ex)
+            {
+                logs[^1] = new DetectLog { Protocol = "IMAP (密码)", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
+            }
         }
 
+        // 2. Token 刷新 → IMAP XOAUTH2
         if (!string.IsNullOrEmpty(account.Token) && !string.IsNullOrEmpty(account.ClientId))
         {
-            tasks.Add(new ProtocolTask
+            logs.Add(new DetectLog { Protocol = "刷新 Token", IsTesting = true });
+            string? accessToken = null;
+            try
             {
-                Name = "Graph API",
-                IsAvailable = true,
-                TestFunc = async () =>
+                accessToken = await _graph.RefreshTokenAsync(account);
+                logs[^1] = new DetectLog
                 {
-                    try
-                    {
-                        var ok = await _graphService.VerifyAsync(account);
-                        return (ok, ok ? "Graph API 验证成功" : "Graph API 验证失败");
-                    }
-                    catch { return (false, "Graph API 连接异常"); }
-                }
-            });
+                    Protocol = "刷新 Token",
+                    IsTesting = false,
+                    Success = accessToken != null,
+                    Message = accessToken != null ? "Token 刷新成功" : "Token 刷新失败（可能已过期）"
+                };
+            }
+            catch (Exception ex)
+            {
+                logs[^1] = new DetectLog { Protocol = "刷新 Token", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
+            }
 
-            tasks.Add(new ProtocolTask
+            if (accessToken != null)
             {
-                Name = "XOAUTH2 IMAP",
-                IsAvailable = true,
-                TestFunc = async () =>
+                logs.Add(new DetectLog { Protocol = "IMAP (XOAUTH2)", IsTesting = true });
+                await Task.Delay(300);
+                try
                 {
-                    try
-                    {
-                        var ok = await _imapService.VerifyAsync(account);
-                        return (ok, ok ? "XOAUTH2 IMAP 验证成功" : "XOAUTH2 IMAP 验证失败");
-                    }
-                    catch { return (false, "XOAUTH2 IMAP 连接异常"); }
+                    var xoauthOk = await _imap.VerifyXoauth2Async(account.Email, accessToken);
+                    logs[^1] = new DetectLog { Protocol = "IMAP (XOAUTH2)", IsTesting = false, Success = xoauthOk, Message = xoauthOk ? "连接成功" : "XOAUTH2 认证失败" };
                 }
-            });
+                catch (Exception ex)
+                {
+                    logs[^1] = new DetectLog { Protocol = "IMAP (XOAUTH2)", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
+                }
+            }
+
+            // 3. 如果 XOAUTH2 失败，试试 Outlook REST API
+            {
+                logs.Add(new DetectLog { Protocol = "Outlook REST API", IsTesting = true });
+                await Task.Delay(300);
+                try
+                {
+                    var apiOk = accessToken != null && await _graph.VerifyAsync(account);
+                    logs[^1] = new DetectLog { Protocol = "Outlook REST API", IsTesting = false, Success = apiOk, Message = apiOk ? "连接成功" : "API 调用失败" };
+                }
+                catch (Exception ex)
+                {
+                    logs[^1] = new DetectLog { Protocol = "Outlook REST API", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
+                }
+            }
         }
 
-        foreach (var t in tasks)
-        {
-            result.LogMessages.Add(new DetectLog
-            {
-                Protocol = t.Name,
-                IsTesting = true
-            });
+        result.LogMessages = logs;
 
-            var (success, message) = await t.TestFunc();
-            result.LogMessages[^1] = new DetectLog
-            {
-                Protocol = t.Name,
-                IsTesting = false,
-                Success = success,
-                Message = message
-            };
-        }
-
-        var best = PickBest(result.LogMessages);
+        var best = PickBest(logs);
         result.Success = best != null;
         result.AuthType = best?.Protocol switch
         {
-            "Graph API" => "graph",
-            "XOAUTH2 IMAP" => "imap",
+            "IMAP (XOAUTH2)" => "imap",
             "IMAP (密码)" => "imap",
+            "Outlook REST API" => "graph",
             _ => ""
         };
-        result.StatusMessage = result.Success
-            ? $"✅ {best!.Protocol} — {best.Message}"
+        result.StatusMessage = best != null
+            ? $"✅ {best.Protocol} — {best.Message}"
             : "❌ 所有协议均无法连接，请检查账号信息";
 
         return result;
@@ -107,23 +109,17 @@ public class AuthDetectService
 
     private DetectLog? PickBest(List<DetectLog> logs)
     {
-        var succeeded = logs.FindAll(l => l.Success);
-        if (succeeded.Count == 0) return null;
+        var ok = logs.FindAll(l => l.Success);
+        if (ok.Count == 0) return null;
 
-        var graph = succeeded.Find(l => l.Protocol == "Graph API");
-        if (graph != null) return graph;
-        var xoauth = succeeded.Find(l => l.Protocol == "XOAUTH2 IMAP");
-        if (xoauth != null) return xoauth;
-        return succeeded[0];
+        var pref = ok.Find(l => l.Protocol == "IMAP (XOAUTH2)");
+        if (pref != null) return pref;
+        pref = ok.Find(l => l.Protocol == "Outlook REST API");
+        if (pref != null) return pref;
+        pref = ok.Find(l => l.Protocol == "IMAP (密码)");
+        if (pref != null) return pref;
+        return ok[0];
     }
-}
-
-public class ProtocolTask
-{
-    public string Name { get; set; } = "";
-    public bool IsAvailable { get; set; }
-    public string Message { get; set; } = "";
-    public System.Func<Task<(bool Success, string Message)>>? TestFunc { get; set; }
 }
 
 public class DetectLog

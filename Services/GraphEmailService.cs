@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
 using OutlookApp.Models;
@@ -14,18 +13,46 @@ public class GraphEmailService : IEmailService
 
     public GraphEmailService()
     {
-        _http = new HttpClient
+        _http = new HttpClient();
+    }
+
+    public async Task<string?> RefreshTokenAsync(EmailAccount account)
+    {
+        try
         {
-            BaseAddress = new Uri("https://graph.microsoft.com/v1.0/")
-        };
+            var content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", account.ClientId),
+                new KeyValuePair<string, string>("grant_type", "refresh_token"),
+                new KeyValuePair<string, string>("refresh_token", account.Token),
+                new KeyValuePair<string, string>("scope", "https://outlook.office.com/.default")
+            });
+
+            var response = await _http.PostAsync("https://login.microsoftonline.com/common/oauth2/v2.0/token", content);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("access_token", out var at) ? at.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<bool> VerifyAsync(EmailAccount account)
     {
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "me");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.Token);
+            var accessToken = await RefreshTokenAsync(account);
+            if (string.IsNullOrEmpty(accessToken)) return false;
+
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                "https://outlook.office.com/api/v2.0/me/messages?$top=1&$select=Subject");
+            request.Headers.Add("Authorization", $"Bearer {accessToken}");
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
             var response = await _http.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
@@ -40,58 +67,45 @@ public class GraphEmailService : IEmailService
         var emails = new List<EmailMessage>();
         try
         {
-            var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"me/messages?$top={maxCount}&$select=id,subject,from,toRecipients,bodyPreview,body,receivedDateTime,hasAttachments,isRead&$orderby=receivedDateTime DESC");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.Token);
+            var accessToken = await RefreshTokenAsync(account);
+            if (string.IsNullOrEmpty(accessToken)) return emails;
+
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top={maxCount}&$select=Subject,From,ReceivedDateTime,BodyPreview,HasAttachments,IsRead");
+            request.Headers.Add("Authorization", $"Bearer {accessToken}");
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
             var response = await _http.SendAsync(request);
             if (!response.IsSuccessStatusCode) return emails;
 
             var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("value", out var valueArray)) return emails;
+            if (!doc.RootElement.TryGetProperty("value", out var valueArray))
+                return emails;
 
             foreach (var item in valueArray.EnumerateArray())
             {
                 var msg = new EmailMessage
                 {
-                    Id = item.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                    Subject = item.TryGetProperty("subject", out var subj) ? subj.GetString() ?? "" : "",
-                    From = item.TryGetProperty("from", out var from)
-                        ? (from.TryGetProperty("emailAddress", out var ea)
-                            ? (ea.TryGetProperty("address", out var addr) ? addr.GetString() ?? "" : "")
+                    Id = Guid.NewGuid().ToString(),
+                    Subject = item.TryGetProperty("Subject", out var s) ? s.GetString() ?? "" : "",
+                    From = item.TryGetProperty("From", out var f)
+                        ? (f.TryGetProperty("EmailAddress", out var ea)
+                            ? (ea.TryGetProperty("Address", out var a) ? a.GetString() ?? "" : "")
                             : "")
                         : "",
-                    BodyPreview = item.TryGetProperty("bodyPreview", out var prev) ? prev.GetString() ?? "" : "",
-                    ReceivedTime = item.TryGetProperty("receivedDateTime", out var dt)
+                    BodyPreview = item.TryGetProperty("BodyPreview", out var p) ? p.GetString() ?? "" : "",
+                    ReceivedTime = item.TryGetProperty("ReceivedDateTime", out var dt)
                         ? (DateTime.TryParse(dt.GetString(), out var parsed) ? parsed : DateTime.MinValue)
                         : DateTime.MinValue,
-                    HasAttachments = item.TryGetProperty("hasAttachments", out var attach) && attach.GetBoolean(),
-                    IsRead = item.TryGetProperty("isRead", out var read) && read.GetBoolean()
+                    HasAttachments = item.TryGetProperty("HasAttachments", out var att) && att.GetBoolean(),
+                    IsRead = item.TryGetProperty("IsRead", out var r) && r.GetBoolean(),
+                    Body = item.TryGetProperty("BodyPreview", out var bp) ? bp.GetString() ?? "" : ""
                 };
-
-                if (item.TryGetProperty("toRecipients", out var toRecipients) && toRecipients.GetArrayLength() > 0)
-                {
-                    var first = toRecipients[0];
-                    if (first.TryGetProperty("emailAddress", out var toEa) && toEa.TryGetProperty("address", out var toAddr))
-                        msg.To = toAddr.GetString() ?? "";
-                }
-
-                if (item.TryGetProperty("body", out var body))
-                {
-                    msg.Body = body.TryGetProperty("content", out var content)
-                        ? content.GetString() ?? ""
-                        : msg.BodyPreview;
-                }
-
                 emails.Add(msg);
             }
         }
-        catch
-        {
-        }
+        catch { }
 
         return emails;
     }
