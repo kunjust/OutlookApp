@@ -5,3 +5,8 @@ obj/
 .vs/
 .DS_Store
 *.log
+publish/
+publish-win/
+*.app/
+OutlookApp.zip
+OutlookApp-win64.zip
