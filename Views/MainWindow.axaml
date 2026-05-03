@@ -14,9 +14,7 @@
         WindowStartupLocation="CenterScreen"
         Background="#0D1117">
 
-    <Design.DataContext>
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+    <Design.DataContext><vm:MainWindowViewModel/></Design.DataContext>
 
     <Window.Resources>
         <SolidColorBrush x:Key="SurfaceBrush">#161B22</SolidColorBrush>
@@ -26,13 +24,12 @@
         <SolidColorBrush x:Key="DangerBrush">#F85149</SolidColorBrush>
         <SolidColorBrush x:Key="TextPrimaryBrush">#E6EDF3</SolidColorBrush>
         <SolidColorBrush x:Key="TextSecondaryBrush">#8B949E</SolidColorBrush>
-        <SolidColorBrush x:Key="TopBarBrush">#010409</SolidColorBrush>
         <SolidColorBrush x:Key="BtnBgBrush">#21262D</SolidColorBrush>
     </Window.Resources>
 
-    <Grid RowDefinitions="48,*">
+    <Grid RowDefinitions="48,Auto,*">
         <!-- 顶部工具栏 -->
-        <Border Grid.Row="0" Background="{StaticResource TopBarBrush}"
+        <Border Grid.Row="0" Background="#010409"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <DockPanel LastChildFill="True" Margin="16,0">
                 <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left" VerticalAlignment="Center">
@@ -46,6 +43,10 @@
                     <Button Content="⟳ 全部刷新" Command="{Binding RefreshAllCommand}"
                             Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource TextPrimaryBrush}"
                             BorderBrush="{StaticResource BorderBrush}" FontSize="13" Height="32" Padding="14,0"/>
+                    <Button Content="删除选中" Command="{Binding DeleteSelectedAccountsCommand}"
+                            IsVisible="{Binding HasSelectedAny}"
+                            Background="{StaticResource DangerBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="13" Height="32" Padding="14,0"/>
                 </StackPanel>
                 <Border DockPanel.Dock="Right" VerticalAlignment="Center"
                         Background="{StaticResource BtnBgBrush}" CornerRadius="4" Padding="10,4">
@@ -55,13 +56,30 @@
             </DockPanel>
         </Border>
 
+        <!-- 导入进度条 -->
+        <Border Grid.Row="1" IsVisible="{Binding IsImporting}" Background="#0D1117" Padding="0">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,4">
+                <TextBlock Grid.Column="0" FontSize="11" Foreground="{StaticResource AccentBrush}"
+                           VerticalAlignment="Center">
+                    <Run Text="正在检测第"/> <Run Text="{Binding ImportCurrent}"/> <Run Text="个，共"/> <Run Text="{Binding ImportTotal}"/> <Run Text="个"/>
+                </TextBlock>
+                <ProgressBar Grid.Column="1" Height="4" Margin="12,0"
+                             Foreground="{StaticResource AccentBrush}"
+                             Background="{StaticResource BorderBrush}"
+                             Value="{Binding ImportCurrent}" Maximum="{Binding ImportTotal}"/>
+                <TextBlock Grid.Column="2" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                           VerticalAlignment="Center">
+                    <Run Text="{Binding ImportCurrent}"/>/<Run Text="{Binding ImportTotal}"/>
+                </TextBlock>
+            </Grid>
+        </Border>
+
         <!-- 主内容区域 -->
-        <Grid Grid.Row="1" ColumnDefinitions="320,4,*">
-            <!-- ===== 左侧：账号列表 ===== -->
+        <Grid Grid.Row="2" ColumnDefinitions="320,4,*">
+            <!-- 左侧：账号列表 -->
             <Border Grid.Column="0" Background="{StaticResource SurfaceBrush}"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
                 <DockPanel>
-                    <!-- 账号列表标题 -->
                     <Border DockPanel.Dock="Top" Padding="16,14" Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="*,Auto">
@@ -75,7 +93,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- 账号列表 -->
                     <ScrollViewer>
                         <ListBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
                                  BorderThickness="0" Background="Transparent" Margin="8,8,8,0">
@@ -98,8 +115,7 @@
                                     <Border Padding="12,10" CornerRadius="8"
                                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                             Background="#0D1117">
-                                        <Grid ColumnDefinitions="28,*,130">
-                                            <!-- 状态图标 -->
+                                        <Grid ColumnDefinitions="28,*,32,100">
                                             <Border Width="28" Height="28" CornerRadius="14"
                                                     Background="{StaticResource SurfaceBrush}"
                                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
@@ -107,7 +123,6 @@
                                                 <TextBlock Text="{Binding DisplayStatus}" FontSize="13"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <!-- 邮箱信息 -->
                                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Email}" FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
@@ -122,8 +137,9 @@
                                                                TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
                                             </StackPanel>
-                                            <!-- 操作按钮 -->
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                            <CheckBox Grid.Column="2" IsChecked="{Binding IsSelected}"
+                                                      VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal"
                                                         HorizontalAlignment="Right" Spacing="4"
                                                         VerticalAlignment="Center">
                                                 <Button Content="复制" FontSize="11" Height="26" MinWidth="36" Padding="4,0"
@@ -156,8 +172,8 @@
 
             <GridSplitter Grid.Column="1" Width="4" Background="#0D1117"/>
 
-            <!-- ===== 右侧：邮件区域 ===== -->
-            <Grid Grid.Column="2" RowDefinitions="Auto,*,0,Auto"
+            <!-- 右侧：邮件区域 -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto"
                   Background="{StaticResource SurfaceBrush}">
 
                 <!-- 搜索栏 -->
@@ -196,7 +212,6 @@
                             <Setter Property="Padding" Value="0"/>
                             <Setter Property="Margin" Value="0"/>
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="BorderThickness" Value="0"/>
                         </Style>
                         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
                             <Setter Property="Background" Value="#1C2533"/>
@@ -210,10 +225,8 @@
                             <Border Padding="14,12" BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="0,0,0,1">
                                 <Grid ColumnDefinitions="6,*,Auto">
-                                    <!-- 未读标记 -->
                                     <Border Width="4" CornerRadius="2" Background="{StaticResource AccentBrush}"
                                             IsVisible="{Binding IsUnread}" VerticalAlignment="Center"/>
-                                    <!-- 邮件内容 -->
                                     <Grid Grid.Column="1" RowDefinitions="Auto,Auto" Margin="10,0,10,0">
                                         <TextBlock Grid.Row="0" Text="{Binding Subject}" FontSize="14" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextPrimaryBrush}"
@@ -224,7 +237,6 @@
                                             <Run Text="{Binding From}"/>  <Run Text="—"/>  <Run Text="{Binding DisplayPreview}"/>
                                         </TextBlock>
                                     </Grid>
-                                    <!-- 日期 + 附件 -->
                                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
                                                 VerticalAlignment="Center">
                                         <Border Background="#1F2A37" CornerRadius="3" Padding="4,1"
@@ -240,40 +252,51 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- 邮件详情 -->
-                <Border Grid.Row="3" Padding="20" Background="#0D1117"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
-                        IsVisible="{Binding HasSelectedEmail}" MaxHeight="300">
-                    <ScrollViewer>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="{Binding SelectedEmail.Subject}" FontSize="18" FontWeight="Bold"
-                                       Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
-                            <Border Background="{StaticResource SurfaceBrush}" CornerRadius="8"
-                                    Padding="14,12" Margin="0,4,0,0">
-                                <Grid ColumnDefinitions="60,*" RowDefinitions="Auto,Auto,Auto">
-                                    <TextBlock Grid.Row="0" Text="发件人" FontSize="12" FontWeight="Bold"
-                                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="1"
-                                               Text="{Binding SelectedEmail.From}" FontSize="13"
-                                               Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <TextBlock Grid.Row="1" Text="收件人" FontSize="12" FontWeight="Bold"
-                                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="1"
-                                               Text="{Binding SelectedEmail.To}" FontSize="13"
-                                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,6,0,0"/>
-                                    <TextBlock Grid.Row="2" Text="时间" FontSize="12" FontWeight="Bold"
-                                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="1"
-                                               Text="{Binding SelectedEmail.DisplayDate}" FontSize="13"
-                                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,6,0,0"/>
-                                </Grid>
-                            </Border>
-                            <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,4"/>
-                            <TextBlock Text="{Binding SelectedEmail.Body}" FontSize="14"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       TextWrapping="Wrap" LineHeight="24"/>
-                        </StackPanel>
-                    </ScrollViewer>
+                <!-- 底部：加载更多 + 邮件详情 -->
+                <Border Grid.Row="2" Background="#0D1117">
+                    <StackPanel>
+                        <Button Content="加载更多邮件" Command="{Binding LoadMoreEmailsCommand}"
+                                IsVisible="{Binding HasMoreEmails}"
+                                Background="{StaticResource BtnBgBrush}"
+                                Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                FontSize="13" Height="36"
+                                HorizontalAlignment="Stretch" Margin="20,10"/>
+                        <Border Padding="20,12" BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                IsVisible="{Binding HasSelectedEmail}">
+                            <ScrollViewer MaxHeight="250">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="{Binding SelectedEmail.Subject}" FontSize="18" FontWeight="Bold"
+                                               Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                    <Border Background="{StaticResource SurfaceBrush}" CornerRadius="8"
+                                            Padding="14,12" Margin="0,4,0,0">
+                                        <Grid ColumnDefinitions="60,*" RowDefinitions="Auto,Auto,Auto">
+                                            <TextBlock Grid.Row="0" Text="发件人" FontSize="12" FontWeight="Bold"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                                       Text="{Binding SelectedEmail.From}" FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Grid.Row="1" Text="收件人" FontSize="12" FontWeight="Bold"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0"/>
+                                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                                       Text="{Binding SelectedEmail.To}" FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" Margin="0,6,0,0"/>
+                                            <TextBlock Grid.Row="2" Text="时间" FontSize="12" FontWeight="Bold"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0"/>
+                                            <TextBlock Grid.Row="2" Grid.Column="1"
+                                                       Text="{Binding SelectedEmail.DisplayDate}" FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" Margin="0,6,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                    <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,4"/>
+                                    <TextBlock Text="{Binding SelectedEmail.Body}" FontSize="14"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               TextWrapping="Wrap" LineHeight="24"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
                 </Border>
             </Grid>
         </Grid>

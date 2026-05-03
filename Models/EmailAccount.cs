@@ -32,6 +32,9 @@ public partial class EmailAccount : ObservableObject
     [ObservableProperty]
     private string _createdAt = string.Empty;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
     public string MaskedEmail => Email.Length > 3
         ? Email[..3] + "****" + Email[Email.IndexOf('@')..]
         : Email;

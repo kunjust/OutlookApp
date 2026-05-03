@@ -16,6 +16,8 @@ public partial class ImportDialogViewModel : ViewModelBase
     private readonly AuthDetectService _detector;
 
     public event Func<Task<string?>>? FilePicked;
+    public event Action<EmailAccount>? AccountVerified;
+    public event Action<int, int>? ProgressUpdated;
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -30,9 +32,6 @@ public partial class ImportDialogViewModel : ViewModelBase
     private ObservableCollection<AccountDetectResult> _accountResults = new();
 
     [ObservableProperty]
-    private bool _hasResults;
-
-    [ObservableProperty]
     private int _totalCount;
 
     [ObservableProperty]
@@ -45,8 +44,6 @@ public partial class ImportDialogViewModel : ViewModelBase
     {
         _detector = new AuthDetectService();
     }
-
-    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
 
     [RelayCommand]
     private async Task SelectFile()
@@ -68,7 +65,6 @@ public partial class ImportDialogViewModel : ViewModelBase
 
         ErrorMessage = null;
         AccountResults.Clear();
-        HasResults = false;
 
         var lines = InputText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var accounts = new List<EmailAccount>();
@@ -88,7 +84,7 @@ public partial class ImportDialogViewModel : ViewModelBase
 
         if (accounts.Count == 0)
         {
-            ErrorMessage = "未解析到有效账号，每行格式: 邮箱----密码----clientid----token";
+            ErrorMessage = "未解析到有效账号";
             return;
         }
 
@@ -96,46 +92,61 @@ public partial class ImportDialogViewModel : ViewModelBase
         IsDetecting = true;
         var success = 0;
 
-        for (int i = 0; i < accounts.Count; i++)
+        _ = Task.Run(async () =>
         {
-            CurrentIndex = i + 1;
-            var acct = accounts[i];
-
-            var result = new AccountDetectResult
+            for (int i = 0; i < accounts.Count; i++)
             {
-                Email = acct.Email,
-                Account = acct,
-                Status = "检测中…"
-            };
-            AccountResults.Add(result);
+                var acct = accounts[i];
+                var idx = i;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    CurrentIndex = idx + 1;
+                    ProgressUpdated?.Invoke(idx + 1, accounts.Count);
+                    AccountResults.Add(new AccountDetectResult
+                    {
+                        Email = acct.Email,
+                        Account = acct,
+                        Status = "检测中…"
+                    });
+                });
 
-            var detection = await _detector.DetectAsync(acct);
-            acct.Status = detection.Success ? "Verified" : "Failed";
-            acct.StatusMessage = detection.StatusMessage;
-            acct.AuthType = detection.AuthType;
+                var detection = await _detector.DetectAsync(acct);
+                acct.Status = detection.Success ? "Verified" : "Failed";
+                acct.StatusMessage = detection.StatusMessage;
+                acct.AuthType = detection.AuthType;
 
-            result.Status = detection.Success ? "✅ 通过" : "❌ 失败";
-            result.StatusMessage = detection.StatusMessage;
-            result.Success = detection.Success;
-            result.Account = acct;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var result = AccountResults.LastOrDefault(r => r.Email == acct.Email);
+                    if (result != null)
+                    {
+                        result.Status = detection.Success ? "✅ 通过" : "❌ 失败";
+                        result.StatusMessage = detection.StatusMessage;
+                        result.Success = detection.Success;
+                    }
+                });
 
-            if (detection.Success) success++;
-        }
+                if (detection.Success)
+                {
+                    success++;
+                    AccountVerified?.Invoke(acct);
+                }
+            }
 
-        SuccessCount = success;
-        HasResults = true;
-        IsDetecting = false;
-    }
-
-    [RelayCommand]
-    private void ConfirmImport()
-    {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                SuccessCount = success;
+                IsDetecting = false;
+            });
+        });
     }
 
     partial void OnErrorMessageChanged(string? value)
     {
         OnPropertyChanged(nameof(HasErrorMessage));
     }
+
+    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
 }
 
 public class AccountDetectResult
@@ -143,9 +154,7 @@ public class AccountDetectResult
     public string Email { get; set; } = "";
     public EmailAccount? Account { get; set; }
     public bool Success { get; set; }
-    public bool IsFailed => !Success;
     public string Status { get; set; } = "待检测";
     public string StatusMessage { get; set; } = "";
     public string Icon => Success ? "✓" : "✗";
-    public string IconColor => Success ? "#3FB950" : "#F85149";
 }

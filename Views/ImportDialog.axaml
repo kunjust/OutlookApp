@@ -3,7 +3,7 @@
         xmlns:vm="using:OutlookApp.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="600"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="520"
         x:Class="OutlookApp.Views.ImportDialog"
         x:Name="ThisDialog"
         x:DataType="vm:ImportDialogViewModel"
@@ -25,10 +25,6 @@
         <SolidColorBrush x:Key="BtnBgBrush">#21262D</SolidColorBrush>
     </Window.Resources>
 
-    <Design.DataContext>
-        <vm:ImportDialogViewModel/>
-    </Design.DataContext>
-
     <Border Padding="24">
         <DockPanel LastChildFill="True">
             <TextBlock DockPanel.Dock="Top" Text="批量导入邮箱账号"
@@ -42,24 +38,14 @@
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                         HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
                 <TextBlock FontSize="12" Foreground="{StaticResource SuccessBrush}"
-                           VerticalAlignment="Center"
-                           IsVisible="{Binding HasResults}">
-                    <Run Text="{Binding SuccessCount}"/> <Run Text="个检测通过，共"/> <Run Text="{Binding TotalCount}"/> <Run Text="个"/>
+                           VerticalAlignment="Center">
+                    <Run Text="{Binding SuccessCount}"/> 个通过，共 <Run Text="{Binding TotalCount}"/> 个
                 </TextBlock>
-                <Button Content="取消"
-                        Width="80" Height="34"
+                <Button Content="关闭" Width="80" Height="34"
                         Background="{StaticResource BtnBgBrush}"
                         Foreground="{StaticResource TextPrimaryBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
-                        Click="OnCancelClick"/>
-                <Button Content="导入选中"
-                        Width="100" Height="34"
-                        IsEnabled="{Binding HasResults}"
-                        Click="OnImportClick"
-                        Background="{StaticResource AccentBrush}"
-                        Foreground="White"
-                        BorderThickness="0"
-                        FontWeight="Bold"/>
+                        Click="OnCloseClick"/>
             </StackPanel>
 
             <StackPanel Spacing="10">
@@ -72,15 +58,16 @@
                         HorizontalAlignment="Left"/>
 
                 <TextBox Text="{Binding InputText}"
-                         PlaceholderText="user1@outlook.com----password1----client1----token1&#xa;user2@outlook.com----password2----client2----token2"
-                         MinHeight="80" MaxHeight="140"
+                         PlaceholderText="user1@outlook.com----pass1----cid1----token1&#xa;user2@outlook.com----pass2----cid2----token2"
+                         MinHeight="70" MaxHeight="120"
                          AcceptsReturn="True" TextWrapping="Wrap"
                          Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
                          BorderBrush="{StaticResource BorderBrush}" FontSize="12"
                          CornerRadius="6" Padding="12,8"/>
 
-                <Button Content="▶ 开始批量检测"
+                <Button Content="▶ 开始检测"
                         Command="{Binding BatchDetectCommand}"
+                        IsEnabled="{Binding IsDetecting}"
                         Background="{StaticResource AccentBrush}"
                         Foreground="White"
                         BorderThickness="0"
@@ -94,10 +81,10 @@
 
                 <TextBlock FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
                            IsVisible="{Binding IsDetecting}">
-                    <Run Text="正在检测第"/> <Run Text="{Binding CurrentIndex}"/> <Run Text="个，共"/> <Run Text="{Binding TotalCount}"/> <Run Text="个"/>
+                    正在检测第 <Run Text="{Binding CurrentIndex}"/> 个，共 <Run Text="{Binding TotalCount}"/> 个
                 </TextBlock>
 
-                <ScrollViewer MaxHeight="220" IsVisible="{Binding HasResults}">
+                <ScrollViewer MaxHeight="220">
                     <ItemsControl ItemsSource="{Binding AccountResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:AccountDetectResult">
@@ -107,13 +94,9 @@
                                         Background="{StaticResource SurfaceBrush}">
                                     <Grid ColumnDefinitions="20,*,Auto">
                                         <TextBlock Grid.Column="0" FontSize="13" VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center" Text="{Binding Icon}">
-                                            <TextBlock.Styles>
-                                                <Style Selector="TextBlock">
-                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
-                                                </Style>
-                                            </TextBlock.Styles>
-                                        </TextBlock>
+                                                   HorizontalAlignment="Center"
+                                                   Text="{Binding Icon}"
+                                                   Foreground="{StaticResource SuccessBrush}"/>
                                         <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Email}" FontSize="12" FontWeight="SemiBold"
                                                        Foreground="{StaticResource TextPrimaryBrush}"

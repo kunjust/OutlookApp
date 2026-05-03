@@ -13,9 +13,11 @@ namespace OutlookApp.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly DatabaseService _db;
-    private readonly AuthDetectService _detector;
     private readonly ImapEmailService _imapService;
     private readonly GraphEmailService _graphService;
+    private List<EmailMessage> _allEmails = new();
+
+    private const int PageSize = 20;
 
     [ObservableProperty]
     private ObservableCollection<EmailAccount> _accounts = new();
@@ -38,10 +40,27 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _statusText = "就绪";
 
+    [ObservableProperty]
+    private bool _isImporting;
+
+    [ObservableProperty]
+    private int _importCurrent;
+
+    [ObservableProperty]
+    private int _importTotal;
+
+    [ObservableProperty]
+    private int _loadedEmailCount;
+
+    [ObservableProperty]
+    private bool _hasMoreEmails;
+
+    [ObservableProperty]
+    private bool _hasSelectedAccounts;
+
     public MainWindowViewModel()
     {
         _db = new DatabaseService();
-        _detector = new AuthDetectService();
         _imapService = new ImapEmailService();
         _graphService = new GraphEmailService();
         LoadAccounts();
@@ -50,6 +69,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool HasSelectedEmail => SelectedEmail != null;
     public bool HasSelectedAccount => SelectedAccount != null;
     public bool HasNoSelectedAccount => SelectedAccount == null;
+    public bool HasSelectedAny => Accounts.Any(a => a.IsSelected);
 
     private void LoadAccounts()
     {
@@ -59,21 +79,27 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ImportAccount()
+    private void ImportAccount()
     {
         var dialog = new Views.ImportDialog();
-        var result = await dialog.ShowDialog<List<EmailAccount>?>(App.MainWindow);
-        if (result == null || result.Count == 0) return;
-
-        var success = 0;
-        foreach (var account in result)
+        if (dialog.DataContext is ImportDialogViewModel vm)
         {
-            account.Id = _db.SaveAccount(account);
-            Accounts.Insert(0, account);
-            success++;
+            vm.AccountVerified += OnAccountVerified;
+            vm.ProgressUpdated += (current, total) =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    ImportCurrent = current;
+                    ImportTotal = total;
+                    IsImporting = true;
+                });
+            };
+            dialog.Closed += (_, _) =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => IsImporting = false);
+            };
         }
-
-        StatusText = $"成功导入 {success} 个账号";
+        dialog.Show(App.MainWindow);
     }
 
     [RelayCommand]
@@ -94,14 +120,48 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedAccount = null;
             Emails.Clear();
         }
-        StatusText = $"已删除账号: {account.Email}";
+        StatusText = $"已删除: {account.Email}";
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedAccounts()
+    {
+        var toRemove = Accounts.Where(a => a.IsSelected).ToList();
+        if (toRemove.Count == 0) return;
+        foreach (var acc in toRemove)
+        {
+            _db.DeleteAccount(acc.Id);
+            Accounts.Remove(acc);
+        }
+        if (toRemove.Contains(SelectedAccount))
+        {
+            SelectedAccount = null;
+            Emails.Clear();
+        }
+        StatusText = $"已删除 {toRemove.Count} 个账号";
+    }
+
+    private void OnAccountVerified(EmailAccount account)
+    {
+        account.Id = _db.SaveAccount(account);
+        Accounts.Insert(0, account);
+        account.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EmailAccount.IsSelected))
+                OnPropertyChanged(nameof(HasSelectedAny));
+        };
+        OnPropertyChanged(nameof(HasSelectedAny));
+        StatusText = $"已导入: {account.Email}";
     }
 
     [RelayCommand]
     private async Task RefreshAccount(EmailAccount account)
     {
         if (account == null) return;
-        await FetchEmailsForAccount(account);
+        StatusText = $"正在刷新 {account.Email}...";
+        if (SelectedAccount == account)
+            await FetchEmailsForAccount(account);
+        StatusText = "刷新完成";
     }
 
     [RelayCommand]
@@ -122,7 +182,10 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedAccountChanged(EmailAccount? value)
     {
         Emails.Clear();
+        _allEmails.Clear();
         SelectedEmail = null;
+        LoadedEmailCount = 0;
+        HasMoreEmails = false;
         OnPropertyChanged(nameof(HasSelectedAccount));
         OnPropertyChanged(nameof(HasNoSelectedAccount));
         if (value != null)
@@ -138,16 +201,34 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSearchTextChanged(string value)
     {
-        if (SelectedAccount == null) return;
-        var allEmails = _db.GetMessages(SelectedAccount.Id);
-        var filtered = string.IsNullOrWhiteSpace(value)
-            ? allEmails
-            : allEmails.Where(m =>
-                m.Subject.Contains(value, StringComparison.OrdinalIgnoreCase) ||
-                m.From.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
-        Emails.Clear();
-        foreach (var m in filtered)
+        FilterEmails();
+    }
+
+    [RelayCommand]
+    private void LoadMoreEmails()
+    {
+        var remaining = _allEmails.Skip(LoadedEmailCount).Take(PageSize).ToList();
+        foreach (var m in remaining)
             Emails.Add(m);
+        LoadedEmailCount += remaining.Count;
+        HasMoreEmails = LoadedEmailCount < _allEmails.Count;
+    }
+
+    private void FilterEmails()
+    {
+        var source = string.IsNullOrWhiteSpace(SearchText)
+            ? _allEmails
+            : _allEmails.Where(m =>
+                m.Subject.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                m.From.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        Emails.Clear();
+        LoadedEmailCount = 0;
+        var page = source.Take(PageSize).ToList();
+        foreach (var m in page)
+            Emails.Add(m);
+        LoadedEmailCount = page.Count;
+        HasMoreEmails = LoadedEmailCount < source.Count;
     }
 
     private async Task FetchEmailsForAccount(EmailAccount account)
@@ -160,26 +241,18 @@ public partial class MainWindowViewModel : ViewModelBase
             List<EmailMessage> messages = new();
             var accessToken = await _graphService.RefreshTokenAsync(account);
             if (!string.IsNullOrEmpty(accessToken))
-            {
-                messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 50);
-            }
+                messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 5);
             else if (!string.IsNullOrEmpty(account.Password))
-            {
-                messages = await _imapService.FetchByPasswordAsync(account, 50);
-            }
+                messages = await _imapService.FetchByPasswordAsync(account, 5);
+
             _db.DeleteMessages(account.Id);
             _db.SaveMessages(account.Id, messages);
         }
-        catch
-        {
-        }
+        catch { }
 
-        var dbMessages = _db.GetMessages(account.Id);
-        Emails.Clear();
-        foreach (var m in dbMessages)
-            Emails.Add(m);
-
+        _allEmails = _db.GetMessages(account.Id);
+        FilterEmails();
         IsLoading = false;
-        StatusText = $"共 {Emails.Count} 封邮件";
+        StatusText = $"共 {_allEmails.Count} 封邮件";
     }
 }
