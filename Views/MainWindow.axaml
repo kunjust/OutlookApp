@@ -75,21 +75,27 @@
         </Border>
 
         <!-- 主内容区域 -->
-        <Grid Grid.Row="2" ColumnDefinitions="320,4,*">
+        <Grid Grid.Row="2" ColumnDefinitions="340,4,*">
             <!-- 左侧：账号列表 -->
             <Border Grid.Column="0" Background="{StaticResource SurfaceBrush}"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Padding="16,14" Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Text="邮箱账号" FontSize="14" FontWeight="Bold"
-                                       Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <Border Grid.Column="1" Background="{StaticResource BtnBgBrush}" CornerRadius="10"
-                                    Padding="8,2" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsAllSelected}"
+                                      VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="邮箱账号" FontSize="14" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                            <Border Grid.Column="2" Background="{StaticResource BtnBgBrush}" CornerRadius="10"
+                                    Padding="8,2" VerticalAlignment="Center" Margin="0,0,8,0">
                                 <TextBlock Text="{Binding Accounts.Count, StringFormat={}{0} 个}"
                                            FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
                             </Border>
+                            <TextBlock Grid.Column="3" Text="全选" FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
 
@@ -115,16 +121,22 @@
                                     <Border Padding="12,10" CornerRadius="8"
                                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                             Background="#0D1117">
-                                        <Grid ColumnDefinitions="28,*,32,100">
-                                            <Border Width="28" Height="28" CornerRadius="14"
+                                        <Grid ColumnDefinitions="24,Auto,28,*,Auto">
+                                            <TextBlock Grid.Column="0" FontSize="11"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                       Text="{Binding Index}"/>
+                                            <CheckBox Grid.Column="1" IsChecked="{Binding IsSelected}"
+                                                      VerticalAlignment="Center" Margin="4,0"/>
+                                            <Border Grid.Column="2" Width="24" Height="24" CornerRadius="12"
                                                     Background="{StaticResource SurfaceBrush}"
                                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                                     VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding DisplayStatus}" FontSize="13"
+                                                <TextBlock Text="{Binding DisplayStatus}" FontSize="11"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Email}" FontSize="13" FontWeight="SemiBold"
+                                            <StackPanel Grid.Column="3" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Email}" FontSize="12" FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            TextTrimming="CharacterEllipsis"/>
                                                 <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,2,0,0">
@@ -137,24 +149,22 @@
                                                                TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
                                             </StackPanel>
-                                            <CheckBox Grid.Column="2" IsChecked="{Binding IsSelected}"
-                                                      VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal"
-                                                        HorizontalAlignment="Right" Spacing="4"
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                                        HorizontalAlignment="Right" Spacing="2"
                                                         VerticalAlignment="Center">
-                                                <Button Content="复制" FontSize="11" Height="26" MinWidth="36" Padding="4,0"
+                                                <Button Content="复制" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
                                                         Background="{StaticResource BtnBgBrush}"
                                                         Foreground="{StaticResource TextSecondaryBrush}"
                                                         BorderBrush="{StaticResource BorderBrush}"
                                                         Command="{Binding $parent[Window].DataContext.CopyEmailCommand}"
                                                         CommandParameter="{Binding}"/>
-                                                <Button Content="删除" FontSize="11" Height="26" MinWidth="36" Padding="4,0"
+                                                <Button Content="删除" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
                                                         Background="{StaticResource BtnBgBrush}"
                                                         Foreground="{StaticResource DangerBrush}"
                                                         BorderBrush="{StaticResource BorderBrush}"
                                                         Command="{Binding $parent[Window].DataContext.DeleteAccountCommand}"
                                                         CommandParameter="{Binding}"/>
-                                                <Button Content="刷新" FontSize="11" Height="26" MinWidth="36" Padding="4,0"
+                                                <Button Content="刷新" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
                                                         Background="{StaticResource BtnBgBrush}"
                                                         Foreground="{StaticResource TextSecondaryBrush}"
                                                         BorderBrush="{StaticResource BorderBrush}"

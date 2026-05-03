@@ -58,6 +58,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasSelectedAccounts;
 
+    [ObservableProperty]
+    private bool _isAllSelected;
+
     public MainWindowViewModel()
     {
         _db = new DatabaseService();
@@ -74,8 +77,19 @@ public partial class MainWindowViewModel : ViewModelBase
     private void LoadAccounts()
     {
         Accounts.Clear();
-        foreach (var acc in _db.GetAccounts())
-            Accounts.Add(acc);
+        var list = _db.GetAccounts();
+        for (int i = 0; i < list.Count; i++)
+        {
+            list[i].Index = i + 1;
+            Accounts.Add(list[i]);
+        }
+    }
+
+    partial void OnIsAllSelectedChanged(bool value)
+    {
+        foreach (var acc in Accounts)
+            acc.IsSelected = value;
+        OnPropertyChanged(nameof(HasSelectedAny));
     }
 
     [RelayCommand]
@@ -138,6 +152,8 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedAccount = null;
             Emails.Clear();
         }
+        for (int i = 0; i < Accounts.Count; i++)
+            Accounts[i].Index = i + 1;
         StatusText = $"已删除 {toRemove.Count} 个账号";
     }
 
@@ -145,6 +161,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         account.Id = _db.SaveAccount(account);
         Accounts.Insert(0, account);
+        for (int i = 0; i < Accounts.Count; i++)
+            Accounts[i].Index = i + 1;
         account.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EmailAccount.IsSelected))
