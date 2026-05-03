@@ -13,10 +13,10 @@ namespace OutlookApp.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly DatabaseService _db;
+    private readonly AuthDetectService _detector;
     private readonly ImapEmailService _imapService;
     private readonly GraphEmailService _graphService;
     private List<EmailMessage> _allEmails = new();
-
     private const int PageSize = 20;
 
     [ObservableProperty]
@@ -56,14 +56,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _hasMoreEmails;
 
     [ObservableProperty]
-    private bool _hasSelectedAccounts;
-
-    [ObservableProperty]
     private bool _isAllSelected;
 
     public MainWindowViewModel()
     {
         _db = new DatabaseService();
+        _detector = new AuthDetectService();
         _imapService = new ImapEmailService();
         _graphService = new GraphEmailService();
         LoadAccounts();
@@ -96,20 +94,51 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task ImportAccount()
     {
         var dialog = new Views.ImportDialog();
-        dialog.Topmost = true;
         var result = await dialog.ShowDialog<List<EmailAccount>?>(App.MainWindow);
         if (result == null || result.Count == 0) return;
 
-        foreach (var account in result)
+        ImportTotal = result.Count;
+        IsImporting = true;
+        var successCount = 0;
+        var failCount = 0;
+
+        for (int i = 0; i < result.Count; i++)
         {
-            account.Id = _db.SaveAccount(account);
-            Accounts.Insert(0, account);
+            var acc = result[i];
+            ImportCurrent = i + 1;
+            StatusText = $"正在检测 ({i + 1}/{result.Count}) {acc.Email}...";
+
+            var detection = await _detector.DetectAsync(acc);
+
+            if (detection.Success)
+            {
+                acc.Status = "Verified";
+                acc.StatusMessage = detection.StatusMessage;
+                acc.AuthType = detection.AuthType;
+                _db.UpdateAccountStatus(acc.Id, acc.Status, acc.StatusMessage, acc.AuthType);
+                acc.Index = Accounts.Count + 1;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => Accounts.Insert(0, acc));
+                successCount++;
+            }
+            else
+            {
+                _db.DeleteAccount(acc.Id);
+                failCount++;
+            }
         }
+
+        UpdateIndices();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            IsImporting = false;
+            StatusText = $"检测完成：成功 {successCount} 个，失败 {failCount} 个";
+        });
+    }
+
+    private void UpdateIndices()
+    {
         for (int i = 0; i < Accounts.Count; i++)
             Accounts[i].Index = i + 1;
-
-        OnPropertyChanged(nameof(HasSelectedAny));
-        StatusText = $"成功导入 {result.Count} 个账号";
     }
 
     [RelayCommand]
@@ -130,6 +159,7 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedAccount = null;
             Emails.Clear();
         }
+        UpdateIndices();
         StatusText = $"已删除: {account.Email}";
     }
 
@@ -148,24 +178,8 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedAccount = null;
             Emails.Clear();
         }
-        for (int i = 0; i < Accounts.Count; i++)
-            Accounts[i].Index = i + 1;
+        UpdateIndices();
         StatusText = $"已删除 {toRemove.Count} 个账号";
-    }
-
-    private void OnAccountVerified(EmailAccount account)
-    {
-        account.Id = _db.SaveAccount(account);
-        Accounts.Insert(0, account);
-        for (int i = 0; i < Accounts.Count; i++)
-            Accounts[i].Index = i + 1;
-        account.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(EmailAccount.IsSelected))
-                OnPropertyChanged(nameof(HasSelectedAny));
-        };
-        OnPropertyChanged(nameof(HasSelectedAny));
-        StatusText = $"已导入: {account.Email}";
     }
 
     [RelayCommand]
@@ -202,10 +216,8 @@ public partial class MainWindowViewModel : ViewModelBase
         HasMoreEmails = false;
         OnPropertyChanged(nameof(HasSelectedAccount));
         OnPropertyChanged(nameof(HasNoSelectedAccount));
-        if (value != null)
-        {
+        if (value != null && value.Status == "Verified")
             _ = FetchEmailsForAccount(value);
-        }
     }
 
     partial void OnSelectedEmailChanged(EmailMessage? value)
@@ -213,10 +225,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasSelectedEmail));
     }
 
-    partial void OnSearchTextChanged(string value)
-    {
-        FilterEmails();
-    }
+    partial void OnSearchTextChanged(string value) => FilterEmails();
 
     [RelayCommand]
     private void LoadMoreEmails()
@@ -249,7 +258,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         StatusText = $"正在获取 {account.Email} 的邮件...";
         IsLoading = true;
-
         try
         {
             List<EmailMessage> messages = new();
@@ -258,12 +266,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 messages = await _imapService.FetchByXoauth2Async(account.Email, accessToken, 5);
             else if (!string.IsNullOrEmpty(account.Password))
                 messages = await _imapService.FetchByPasswordAsync(account, 5);
-
             _db.DeleteMessages(account.Id);
             _db.SaveMessages(account.Id, messages);
         }
         catch { }
-
         _allEmails = _db.GetMessages(account.Id);
         FilterEmails();
         IsLoading = false;

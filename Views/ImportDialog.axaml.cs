@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using OutlookApp.Models;
+using OutlookApp.Services;
 using OutlookApp.ViewModels;
 
 namespace OutlookApp.Views;
@@ -39,13 +40,10 @@ public partial class ImportDialog : Window
             if (string.IsNullOrEmpty(path)) return null;
             return await File.ReadAllTextAsync(path);
         }
-        catch
-        {
-            return null;
-        }
+        catch { return null; }
     }
 
-    private void OnCloseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnCancelClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         Close(null);
     }
@@ -54,7 +52,15 @@ public partial class ImportDialog : Window
     {
         if (DataContext is ImportDialogViewModel vm)
         {
-            var accounts = vm.GetVerifiedAccounts();
+            var accounts = vm.ParseAccounts();
+            if (accounts.Count == 0)
+            {
+                vm.ErrorMessage = "未解析到有效账号";
+                return;
+            }
+            var db = new DatabaseService();
+            foreach (var a in accounts)
+                a.Id = db.SaveAccount(a);
             Close(accounts);
         }
     }
