@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using OutlookApp.Models;
 using OutlookApp.ViewModels;
 
 namespace OutlookApp.Views;
@@ -44,6 +47,15 @@ public partial class ImportDialog : Window
 
     private void OnCloseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        Close();
+        Close(null);
+    }
+
+    private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is ImportDialogViewModel vm)
+        {
+            var accounts = vm.GetVerifiedAccounts();
+            Close(accounts);
+        }
     }
 }

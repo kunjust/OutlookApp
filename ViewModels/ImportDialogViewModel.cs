@@ -16,8 +16,6 @@ public partial class ImportDialogViewModel : ViewModelBase
     private readonly AuthDetectService _detector;
 
     public event Func<Task<string?>>? FilePicked;
-    public event Action<EmailAccount>? AccountVerified;
-    public event Action<int, int>? ProgressUpdated;
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -40,9 +38,21 @@ public partial class ImportDialogViewModel : ViewModelBase
     [ObservableProperty]
     private int _currentIndex;
 
+    [ObservableProperty]
+    private bool _hasResults;
+
     public ImportDialogViewModel()
     {
         _detector = new AuthDetectService();
+    }
+
+    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
+
+    public List<EmailAccount> GetVerifiedAccounts()
+    {
+        return AccountResults.Where(r => r.Success && r.Account != null)
+                             .Select(r => r.Account!)
+                             .ToList();
     }
 
     [RelayCommand]
@@ -65,6 +75,7 @@ public partial class ImportDialogViewModel : ViewModelBase
 
         ErrorMessage = null;
         AccountResults.Clear();
+        HasResults = false;
 
         var lines = InputText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var accounts = new List<EmailAccount>();
@@ -101,7 +112,6 @@ public partial class ImportDialogViewModel : ViewModelBase
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     CurrentIndex = idx + 1;
-                    ProgressUpdated?.Invoke(idx + 1, accounts.Count);
                     AccountResults.Add(new AccountDetectResult
                     {
                         Email = acct.Email,
@@ -126,16 +136,13 @@ public partial class ImportDialogViewModel : ViewModelBase
                     }
                 });
 
-                if (detection.Success)
-                {
-                    success++;
-                    AccountVerified?.Invoke(acct);
-                }
+                if (detection.Success) success++;
             }
 
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 SuccessCount = success;
+                HasResults = true;
                 IsDetecting = false;
             });
         });
@@ -145,8 +152,6 @@ public partial class ImportDialogViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasErrorMessage));
     }
-
-    public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
 }
 
 public class AccountDetectResult

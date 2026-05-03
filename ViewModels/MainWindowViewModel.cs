@@ -93,27 +93,23 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ImportAccount()
+    private async Task ImportAccount()
     {
         var dialog = new Views.ImportDialog();
-        if (dialog.DataContext is ImportDialogViewModel vm)
+        dialog.Topmost = true;
+        var result = await dialog.ShowDialog<List<EmailAccount>?>(App.MainWindow);
+        if (result == null || result.Count == 0) return;
+
+        foreach (var account in result)
         {
-            vm.AccountVerified += OnAccountVerified;
-            vm.ProgressUpdated += (current, total) =>
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    ImportCurrent = current;
-                    ImportTotal = total;
-                    IsImporting = true;
-                });
-            };
-            dialog.Closed += (_, _) =>
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => IsImporting = false);
-            };
+            account.Id = _db.SaveAccount(account);
+            Accounts.Insert(0, account);
         }
-        dialog.Show(App.MainWindow);
+        for (int i = 0; i < Accounts.Count; i++)
+            Accounts[i].Index = i + 1;
+
+        OnPropertyChanged(nameof(HasSelectedAny));
+        StatusText = $"成功导入 {result.Count} 个账号";
     }
 
     [RelayCommand]

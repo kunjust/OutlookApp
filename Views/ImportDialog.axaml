@@ -46,6 +46,14 @@
                         Foreground="{StaticResource TextPrimaryBrush}"
                         BorderBrush="{StaticResource BorderBrush}"
                         Click="OnCloseClick"/>
+                <Button Content="导入选中"
+                        Width="100" Height="34"
+                        IsEnabled="{Binding HasResults}"
+                        Click="OnImportClick"
+                        Background="{StaticResource AccentBrush}"
+                        Foreground="White"
+                        BorderThickness="0"
+                        FontWeight="Bold"/>
             </StackPanel>
 
             <StackPanel Spacing="10">
@@ -58,7 +66,7 @@
                         HorizontalAlignment="Left"/>
 
                 <TextBox Text="{Binding InputText}"
-                         PlaceholderText="user1@outlook.com----pass1----cid1----token1&#xa;user2@outlook.com----pass2----cid2----token2"
+                         PlaceholderText="粘贴账号，一行一个&#xa;邮箱----密码----clientid----token"
                          MinHeight="70" MaxHeight="120"
                          AcceptsReturn="True" TextWrapping="Wrap"
                          Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
@@ -67,7 +75,6 @@
 
                 <Button Content="▶ 开始检测"
                         Command="{Binding BatchDetectCommand}"
-                        IsEnabled="{Binding IsDetecting}"
                         Background="{StaticResource AccentBrush}"
                         Foreground="White"
                         BorderThickness="0"
@@ -84,7 +91,7 @@
                     正在检测第 <Run Text="{Binding CurrentIndex}"/> 个，共 <Run Text="{Binding TotalCount}"/> 个
                 </TextBlock>
 
-                <ScrollViewer MaxHeight="220">
+                <ScrollViewer MaxHeight="220" IsVisible="{Binding HasResults}">
                     <ItemsControl ItemsSource="{Binding AccountResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:AccountDetectResult">
