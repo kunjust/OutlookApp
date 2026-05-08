@@ -152,11 +152,11 @@
                                             <StackPanel Grid.Column="4" Orientation="Horizontal"
                                                         HorizontalAlignment="Right" Spacing="2"
                                                         VerticalAlignment="Center">
-                                                <Button Content="已用" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
+                                                <Button Content="复制" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
                                                         Background="{StaticResource BtnBgBrush}"
-                                                        Foreground="{StaticResource DangerBrush}"
+                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                         BorderBrush="{StaticResource BorderBrush}"
-                                                        Command="{Binding $parent[Window].DataContext.MarkAsUsedCommand}"
+                                                        Command="{Binding $parent[Window].DataContext.CopyEmailCommand}"
                                                         CommandParameter="{Binding}"/>
                                                 <Button Content="删除" FontSize="10" Height="24" MinWidth="32" Padding="4,0"
                                                         Background="{StaticResource BtnBgBrush}"

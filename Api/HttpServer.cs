@@ -79,6 +79,8 @@ public class HttpServer
                 await HandleGetCode(context.Request, response);
             else if (path == "/api/status" && context.Request.HttpMethod == "GET")
                 HandleStatus(context.Request, response);
+            else if (path == "/api/mark-used" && context.Request.HttpMethod == "POST")
+                await HandleMarkUsed(context.Request, response);
             else if (path == "/docs")
                 HandleDocs(response);
             else
@@ -283,6 +285,48 @@ public class HttpServer
             lastCode = account.LastCode,
             lastSyncTime = account.LastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""
         });
+    }
+
+    private async Task HandleMarkUsed(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        try
+        {
+            using var reader = new StreamReader(request.InputStream);
+            var body = await reader.ReadToEndAsync();
+            var data = JsonSerializer.Deserialize<MarkUsedRequest>(body, JsonOpts);
+            var email = data?.Email ?? request.QueryString["email"] ?? "";
+
+            if (string.IsNullOrEmpty(email))
+            {
+                SendResponse(response, 400, new { success = false, message = "缺少 email 参数" });
+                return;
+            }
+
+            var account = _dbService.GetAccountByEmail(email);
+            if (account == null)
+            {
+                SendResponse(response, 404, new { success = false, message = "未找到该邮箱账户" });
+                return;
+            }
+
+            _dbService.MarkAccountAsUsed(account.Id);
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _mainWindowVm?.MarkAsUsedCommand.Execute(account);
+            });
+
+            SendResponse(response, 200, new { success = true, message = "已标记为已使用" });
+        }
+        catch (Exception ex)
+        {
+            SendResponse(response, 500, new { success = false, message = ex.Message });
+        }
+    }
+
+    private class MarkUsedRequest
+    {
+        public string? Email { get; set; }
     }
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
