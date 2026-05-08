@@ -5,14 +5,22 @@ namespace OutlookApp;
 
 sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        if (args.Length > 0 && args[0] == "--server")
+        {
+            var port = 5000;
+            if (args.Length > 1)
+                int.TryParse(args[1], out port);
+            ServerTest.Run(port);
+            return;
+        }
 
-    // Avalonia configuration, don't remove; also used by visual designer.
+        BuildAvaloniaApp()
+            .StartWithClassicDesktopLifetime(args);
+    }
+
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()

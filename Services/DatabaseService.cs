@@ -50,6 +50,22 @@ public class DatabaseService
             PRAGMA foreign_keys = ON;
             """;
         cmd.ExecuteNonQuery();
+
+        foreach (var col in new[] {
+            ("Allocated", "INTEGER DEFAULT 0"),
+            ("LastCode", "TEXT DEFAULT ''"),
+            ("LastSyncTime", "TEXT"),
+            ("IsUsed", "INTEGER DEFAULT 0"),
+        })
+        {
+            try
+            {
+                using var c = conn.CreateCommand();
+                c.CommandText = $"ALTER TABLE EmailAccounts ADD COLUMN {col.Item1} {col.Item2}";
+                c.ExecuteNonQuery();
+            }
+            catch { }
+        }
     }
 
     public int SaveAccount(EmailAccount account)
@@ -58,8 +74,8 @@ public class DatabaseService
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO EmailAccounts (Email, PasswordEncrypted, ClientId, TokenEncrypted, AuthType, Status, StatusMessage)
-            VALUES ($email, $pass, $clientId, $token, $auth, $status, $msg);
+            INSERT INTO EmailAccounts (Email, PasswordEncrypted, ClientId, TokenEncrypted, AuthType, Status, StatusMessage, Allocated, IsUsed)
+            VALUES ($email, $pass, $clientId, $token, $auth, $status, $msg, $allocated, $isUsed);
             SELECT last_insert_rowid();
             """;
         cmd.Parameters.AddWithValue("$email", account.Email);
@@ -69,6 +85,8 @@ public class DatabaseService
         cmd.Parameters.AddWithValue("$auth", account.AuthType ?? "");
         cmd.Parameters.AddWithValue("$status", account.Status);
         cmd.Parameters.AddWithValue("$msg", account.StatusMessage);
+        cmd.Parameters.AddWithValue("$allocated", account.Allocated ? 1 : 0);
+        cmd.Parameters.AddWithValue("$isUsed", account.IsUsed ? 1 : 0);
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
@@ -91,7 +109,7 @@ public class DatabaseService
         using var conn = new SqliteConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM EmailAccounts ORDER BY CreatedAt DESC";
+        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE IsUsed=0 OR IsUsed IS NULL ORDER BY CreatedAt ASC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -106,10 +124,112 @@ public class DatabaseService
                 Token = string.IsNullOrEmpty(encryptedToken) ? "" : EncryptionService.Decrypt(encryptedToken),
                 AuthType = reader["AuthType"] as string ?? "",
                 Status = reader["Status"] as string ?? "Pending",
-                StatusMessage = reader["StatusMessage"] as string ?? ""
+                StatusMessage = reader["StatusMessage"] as string ?? "",
+                Allocated = (reader["Allocated"] as int? ?? 0) == 1,
+                LastCode = reader["LastCode"] as string ?? "",
+                LastSyncTime = ParseDateTime(reader["LastSyncTime"] as string),
+                IsUsed = (reader["IsUsed"] as int? ?? 0) == 1,
             });
         }
         return accounts;
+    }
+
+    public string ConnectionString => _connectionString;
+
+    public bool TryAllocateAccount(out string email)
+    {
+        email = string.Empty;
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var tx = conn.BeginTransaction();
+
+        using var cmd1 = conn.CreateCommand();
+        cmd1.CommandText = "SELECT Id, Email FROM EmailAccounts WHERE Allocated=0 AND Status='Verified' ORDER BY CreatedAt ASC LIMIT 1";
+        using var reader = cmd1.ExecuteReader();
+        if (!reader.Read())
+        {
+            tx.Rollback();
+            return false;
+        }
+        var id = Convert.ToInt32(reader["Id"]);
+        email = reader["Email"] as string ?? string.Empty;
+        reader.Close();
+
+        using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "UPDATE EmailAccounts SET Allocated=1 WHERE Id=$id";
+        cmd2.Parameters.AddWithValue("$id", id);
+        cmd2.ExecuteNonQuery();
+
+        tx.Commit();
+        return true;
+    }
+
+    public EmailAccount? GetAccountByEmail(string email)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE Email=$email";
+        cmd.Parameters.AddWithValue("$email", email);
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+            return null;
+
+        var encryptedPass = reader["PasswordEncrypted"] as string;
+        var encryptedToken = reader["TokenEncrypted"] as string;
+        return new EmailAccount
+        {
+            Id = Convert.ToInt32(reader["Id"]),
+            Email = reader["Email"] as string ?? "",
+            Password = string.IsNullOrEmpty(encryptedPass) ? "" : EncryptionService.Decrypt(encryptedPass),
+            ClientId = reader["ClientId"] as string ?? "",
+            Token = string.IsNullOrEmpty(encryptedToken) ? "" : EncryptionService.Decrypt(encryptedToken),
+            AuthType = reader["AuthType"] as string ?? "",
+            Status = reader["Status"] as string ?? "Pending",
+            StatusMessage = reader["StatusMessage"] as string ?? "",
+            Allocated = (reader["Allocated"] as int? ?? 0) == 1,
+            LastCode = reader["LastCode"] as string ?? "",
+            LastSyncTime = ParseDateTime(reader["LastSyncTime"] as string),
+        };
+    }
+
+    public void UpdateAccountCodeAndSyncTime(string email, string code, DateTime syncTime)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE EmailAccounts SET LastCode=$code, LastSyncTime=$sync WHERE Email=$email";
+        cmd.Parameters.AddWithValue("$code", code);
+        cmd.Parameters.AddWithValue("$sync", syncTime.ToString("yyyy-MM-dd HH:mm:ss"));
+        cmd.Parameters.AddWithValue("$email", email);
+        cmd.ExecuteNonQuery();
+    }
+
+    public bool AreAllAccountsAllocated()
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM EmailAccounts WHERE Allocated=0 AND Status='Verified'";
+        var count = Convert.ToInt32(cmd.ExecuteScalar());
+        return count == 0;
+    }
+
+    private static DateTime? ParseDateTime(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return null;
+        return DateTime.TryParse(value, out var dt) ? dt : null;
+    }
+
+    public void MarkAccountAsUsed(int accountId)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE EmailAccounts SET IsUsed=1 WHERE Id=$id";
+        cmd.Parameters.AddWithValue("$id", accountId);
+        cmd.ExecuteNonQuery();
     }
 
     public void DeleteAccount(int accountId)

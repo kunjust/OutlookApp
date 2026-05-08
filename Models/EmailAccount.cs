@@ -38,6 +38,18 @@ public partial class EmailAccount : ObservableObject
     [ObservableProperty]
     private int _index;
 
+    [ObservableProperty]
+    private bool _allocated;
+
+    [ObservableProperty]
+    private string _lastCode = string.Empty;
+
+    [ObservableProperty]
+    private DateTime? _lastSyncTime;
+
+    [ObservableProperty]
+    private bool _isUsed;
+
     public string MaskedEmail => Email.Length > 3
         ? Email[..3] + "****" + Email[Email.IndexOf('@')..]
         : Email;

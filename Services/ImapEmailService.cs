@@ -11,8 +11,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
-public class ImapEmailService : IEmailService
+public partial class ImapEmailService : IEmailService
 {
+    public static ImapEmailService Create() => new();
     private const string Host = "outlook.office365.com";
     private const int Port = 993;
 

@@ -67,6 +67,15 @@ public partial class MainWindowViewModel : ViewModelBase
         LoadAccounts();
     }
 
+    public MainWindowViewModel(DatabaseService dbService)
+    {
+        _db = dbService;
+        _detector = new AuthDetectService();
+        _imapService = new ImapEmailService();
+        _graphService = new GraphEmailService();
+        LoadAccounts();
+    }
+
     public bool HasSelectedEmail => SelectedEmail != null;
     public bool HasSelectedAccount => SelectedAccount != null;
     public bool HasNoSelectedAccount => SelectedAccount == null;
@@ -139,6 +148,22 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         for (int i = 0; i < Accounts.Count; i++)
             Accounts[i].Index = i + 1;
+    }
+
+    [RelayCommand]
+    private void MarkAsUsed(EmailAccount account)
+    {
+        if (account == null) return;
+        account.IsUsed = true;
+        _db.MarkAccountAsUsed(account.Id);
+        Accounts.Remove(account);
+        if (SelectedAccount == account)
+        {
+            SelectedAccount = null;
+            Emails.Clear();
+        }
+        UpdateIndices();
+        StatusText = $"已标记使用: {account.Email}";
     }
 
     [RelayCommand]
