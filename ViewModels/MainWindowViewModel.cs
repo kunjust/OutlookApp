@@ -125,8 +125,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 acc.StatusMessage = detection.StatusMessage;
                 acc.AuthType = detection.AuthType;
                 _db.UpdateAccountStatus(acc.Id, acc.Status, acc.StatusMessage, acc.AuthType);
-                acc.Index = Accounts.Count + 1;
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => Accounts.Insert(0, acc));
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => Accounts.Add(acc));
                 successCount++;
             }
             else
