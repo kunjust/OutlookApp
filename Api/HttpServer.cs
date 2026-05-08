@@ -194,6 +194,23 @@ public class HttpServer
         <pre><code>{ "success": true, "email": "user@outlook.com", "allocated": true, "lastCode": "123456", "lastSyncTime": "2026-05-06 10:30:00" }</code></pre>
     </div>
 
+    <div class="endpoint">
+        <span class="method">POST</span> <span class="path">/api/mark-used</span>
+        <p class="desc">标记邮箱为已使用（移动端上报）。调用后该邮箱从可用列表中移除，不再分配。</p>
+        <table class="params">
+            <tr><th>参数</th><th>类型</th><th>位置</th><th>说明</th></tr>
+            <tr><td><code>email</code></td><td>string</td><td>JSON body 或 Query</td><td>要标记的邮箱地址</td></tr>
+        </table>
+        <p class="resp-label">请求示例：</p>
+        <pre><code>curl -X POST http://localhost:5000/api/mark-used \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@outlook.com"}'</code></pre>
+        <p class="resp-label">成功响应：</p>
+        <pre><code>{ "success": true, "message": "已标记为已使用" }</code></pre>
+        <p class="resp-label">失败响应：</p>
+        <pre><code>{ "success": false, "message": "未找到该邮箱账户" }</code></pre>
+    </div>
+
     <script>
         function tryApi(endpoint, btn) {
             var result = document.getElementById('result-' + endpoint);
