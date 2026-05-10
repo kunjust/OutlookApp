@@ -222,6 +222,49 @@ public class DatabaseService
         return DateTime.TryParse(value, out var dt) ? dt : null;
     }
 
+    public int GetAccountsCount()
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM EmailAccounts WHERE IsUsed=0";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    public List<EmailAccount> GetAccountsPaged(int page, int pageSize)
+    {
+        var accounts = new List<EmailAccount>();
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        var offset = (page - 1) * pageSize;
+        cmd.CommandText = @"SELECT * FROM EmailAccounts WHERE IsUsed=0 ORDER BY CreatedAt ASC LIMIT $limit OFFSET $offset";
+        cmd.Parameters.AddWithValue("$limit", pageSize);
+        cmd.Parameters.AddWithValue("$offset", offset);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var encryptedPass = reader["PasswordEncrypted"] as string;
+            var encryptedToken = reader["TokenEncrypted"] as string;
+            accounts.Add(new EmailAccount
+            {
+                Id = Convert.ToInt32(reader["Id"]),
+                Email = reader["Email"] as string ?? "",
+                Password = string.IsNullOrEmpty(encryptedPass) ? "" : EncryptionService.Decrypt(encryptedPass),
+                ClientId = reader["ClientId"] as string ?? "",
+                Token = string.IsNullOrEmpty(encryptedToken) ? "" : EncryptionService.Decrypt(encryptedToken),
+                AuthType = reader["AuthType"] as string ?? "",
+                Status = reader["Status"] as string ?? "Pending",
+                StatusMessage = reader["StatusMessage"] as string ?? "",
+                Allocated = (reader["Allocated"] as int? ?? 0) == 1,
+                LastCode = reader["LastCode"] as string ?? "",
+                LastSyncTime = ParseDateTime(reader["LastSyncTime"] as string),
+                IsUsed = (reader["IsUsed"] as int? ?? 0) == 1,
+            });
+        }
+        return accounts;
+    }
+
     public void MarkAccountAsUsed(int accountId)
     {
         using var conn = new SqliteConnection(_connectionString);

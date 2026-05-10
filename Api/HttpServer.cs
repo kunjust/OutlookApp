@@ -14,21 +14,32 @@ public class HttpServer
 {
     private readonly HttpListener _listener;
     private readonly DatabaseService _dbService;
+    private readonly KeywordService _kwService;
     private readonly MainWindowViewModel _mainWindowVm;
     private readonly EmailSyncOnDemand _emailSync;
     private readonly string _docsUrl;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
 
-    public HttpServer(int port, DatabaseService dbService) : this(port, dbService, null!, false) { }
+    public HttpServer(int port, DatabaseService dbService, KeywordService kwService)
+        : this(port, dbService, kwService, null!, false) { }
 
-    public HttpServer(int port, DatabaseService dbService, bool showDocs) : this(port, dbService, null!, showDocs) { }
+    public HttpServer(int port, DatabaseService dbService, bool showDocs)
+        : this(port, dbService, new KeywordService(dbService.ConnectionString), null!, showDocs) { }
 
-    public HttpServer(int port, DatabaseService dbService, MainWindowViewModel mainWindowVm) : this(port, dbService, mainWindowVm, false) { }
+    public HttpServer(int port, DatabaseService dbService, KeywordService kwService, MainWindowViewModel mainWindowVm)
+        : this(port, dbService, kwService, mainWindowVm, false) { }
+
+    public HttpServer(int port, DatabaseService dbService, MainWindowViewModel mainWindowVm)
+        : this(port, dbService, mainWindowVm, false) { }
 
     public HttpServer(int port, DatabaseService dbService, MainWindowViewModel mainWindowVm, bool showDocs)
+        : this(port, dbService, new KeywordService(dbService.ConnectionString), mainWindowVm, showDocs) { }
+
+    public HttpServer(int port, DatabaseService dbService, KeywordService kwService, MainWindowViewModel mainWindowVm, bool showDocs)
     {
         _dbService = dbService;
+        _kwService = kwService;
         _mainWindowVm = mainWindowVm;
         _emailSync = new EmailSyncOnDemand(dbService, ImapEmailService.Create());
         _docsUrl = showDocs ? $"http://localhost:{port}/docs" : "";
@@ -73,14 +84,33 @@ public class HttpServer
         try
         {
             var path = context.Request.Url?.AbsolutePath ?? "/";
+
+            // API 激活网关：所有 /api/ 路径需要卡密激活
+            if (path.StartsWith("/api/") && path != "/docs")
+            {
+                if (_mainWindowVm == null || !_mainWindowVm.IsActivated)
+                {
+                    SendResponse(response, 403, new
+                    {
+                        error = "unauthorized",
+                        message = "请先激活卡密"
+                    });
+                    return;
+                }
+            }
+
             if (path == "/api/email" && context.Request.HttpMethod == "GET")
                 HandleAllocateEmail(response);
+            else if (path == "/api/accounts" && context.Request.HttpMethod == "GET")
+                HandleListAccounts(context.Request, response);
+            else if (path == "/api/target/allocate" && context.Request.HttpMethod == "GET")
+                HandleTargetAllocate(response);
+            else if (path == "/api/target/count" && context.Request.HttpMethod == "GET")
+                HandleTargetCount(response);
             else if (path == "/api/code" && context.Request.HttpMethod == "GET")
                 await HandleGetCode(context.Request, response);
             else if (path == "/api/status" && context.Request.HttpMethod == "GET")
                 HandleStatus(context.Request, response);
-            else if (path == "/api/mark-used" && context.Request.HttpMethod == "POST")
-                await HandleMarkUsed(context.Request, response);
             else if (path == "/docs")
                 HandleDocs(response);
             else
@@ -111,8 +141,7 @@ public class HttpServer
 
     private void HandleDocs(HttpListenerResponse response)
     {
-        var baseUrl = _docsUrl.Replace("/docs", "");
-        var html = GenerateDocsHtml(baseUrl);
+        var html = GenerateDocsHtml();
         var bytes = System.Text.Encoding.UTF8.GetBytes(html);
         response.StatusCode = 200;
         response.ContentType = "text/html; charset=utf-8";
@@ -120,14 +149,13 @@ public class HttpServer
         response.OutputStream.Write(bytes, 0, bytes.Length);
     }
 
-    private static string GenerateDocsHtml(string baseUrl)
+    private static string GenerateDocsHtml()
     {
-        return """
-<!DOCTYPE html>
-<html lang="zh-CN">
+        return @"<!DOCTYPE html>
+<html lang=""zh-CN"">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <title>OutlookApp API 文档</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -151,64 +179,92 @@ public class HttpServer
         .result { display: none; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-top: 8px; }
         .result.active { display: block; }
         .result pre { border: none; margin: 0; padding: 0; }
+        .section { font-size: 18px; color: #58a6ff; font-weight: 600; margin: 32px 0 16px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
     </style>
 </head>
 <body>
     <h1>📧 OutlookApp API 文档</h1>
-    <p class="subtitle">邮件验证码获取接口 · 开发环境专用</p>
+    <p class=""subtitle"">邮件验证码获取接口 &middot; 开发环境专用</p>
 
-    <div class="endpoint">
-        <span class="method">GET</span> <span class="path">/api/email</span>
-        <p class="desc">分配一个可用邮箱。每次调用会从数据库中取出一个未分配的已验证账号，标记为已分配后返回。</p>
-        <p class="params"><strong>参数：</strong>无</p>
-        <p class="resp-label">成功响应：</p>
-        <pre><code>{ "success": true, "email": "user@outlook.com" }</code></pre>
-        <p class="resp-label">邮箱用尽：</p>
-        <pre><code>{ "success": false, "message": "邮箱已全部使用，请导入更多账户。" }</code></pre>
-        <button class="try-btn" onclick="tryApi('email', this)">▶ 在线测试</button>
-        <div class="result" id="result-email"></div>
+    <div class=""section"">📬 邮箱接口</div>
+
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/email</span>
+        <p class=""desc"">分配一个可用邮箱</p>
+        <p class=""resp-label"">成功响应：</p>
+        <pre><code>{ ""success"": true, ""email"": ""user@outlook.com"" }</code></pre>
+        <p class=""resp-label"">邮箱用尽：</p>
+        <pre><code>{ ""success"": false, ""message"": ""邮箱已全部使用"" }</code></pre>
+        <button class=""try-btn"" onclick=""tryApi('email', this)"">▶ 在线测试</button>
+        <div class=""result"" id=""result-email""></div>
     </div>
 
-    <div class="endpoint">
-        <span class="method">GET</span> <span class="path">/api/code</span>
-        <p class="desc">获取指定邮箱收到的 Instagram 验证码（6 位数字）。<br>当 retry=1 且数据库无验证码时，自动触发 IMAP 拉取最新邮件。</p>
-        <table class="params">
-            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
-            <tr><td><code>email</code></td><td>string</td><td>是</td><td>已分配的邮箱地址</td></tr>
-            <tr><td><code>retry</code></td><td>0/1</td><td>否</td><td>未找到时是否触发 IMAP 刷新（默认 0）</td></tr>
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/accounts</span>
+        <p class=""desc"">分页查询所有可用邮箱列表</p>
+        <table class=""params"">
+            <tr><th>参数</th><th>类型</th><th>默认</th><th>说明</th></tr>
+            <tr><td><code>page</code></td><td>int</td><td>1</td><td>页码，从 1 开始</td></tr>
+            <tr><td><code>pageSize</code></td><td>int</td><td>30</td><td>每页数量（最大 100）</td></tr>
         </table>
-        <p class="resp-label">成功响应：</p>
-        <pre><code>{ "success": true, "code": "123456", "time": "2026-05-06 10:30:00" }</code></pre>
-        <p class="resp-label">暂无验证码：</p>
-        <pre><code>{ "success": false, "message": "暂无验证码" }</code></pre>
+        <p class=""resp-label"">响应：</p>
+        <pre><code>{
+  ""success"": true,
+  ""page"": 1,
+  ""pageSize"": 30,
+  ""total"": 150,
+  ""totalPages"": 5,
+  ""items"": [{ ""email"": ""..."", ""status"": ""Verified"", ""allocated"": false }]
+}</code></pre>
+        <button class=""try-btn"" onclick=""tryApi('accounts', this)"">▶ 在线测试</button>
+        <div class=""result"" id=""result-accounts""></div>
     </div>
 
-    <div class="endpoint">
-        <span class="method">GET</span> <span class="path">/api/status</span>
-        <p class="desc">查询邮箱的分配状态和最新验证码信息。</p>
-        <table class="params">
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/code</span>
+        <p class=""desc"">获取指定邮箱的 Instagram 验证码（6 位数字）</p>
+        <table class=""params"">
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+            <tr><td><code>email</code></td><td>string</td><td>是</td><td>邮箱地址</td></tr>
+            <tr><td><code>retry</code></td><td>0/1</td><td>否</td><td>未找到时是否触发 IMAP 刷新</td></tr>
+        </table>
+        <p class=""resp-label"">成功响应：</p>
+        <pre><code>{ ""success"": true, ""code"": ""123456"", ""time"": ""2026-05-06 10:30:00"" }</code></pre>
+        <p class=""resp-label"">暂无验证码：</p>
+        <pre><code>{ ""success"": false, ""message"": ""暂无验证码"" }</code></pre>
+    </div>
+
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/status</span>
+        <p class=""desc"">查询邮箱的分配状态</p>
+        <table class=""params"">
             <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
             <tr><td><code>email</code></td><td>string</td><td>是</td><td>邮箱地址</td></tr>
         </table>
-        <p class="resp-label">响应：</p>
-        <pre><code>{ "success": true, "email": "user@outlook.com", "allocated": true, "lastCode": "123456", "lastSyncTime": "2026-05-06 10:30:00" }</code></pre>
+        <p class=""resp-label"">响应：</p>
+        <pre><code>{ ""success"": true, ""email"": ""user@outlook.com"", ""allocated"": true, ""lastCode"": """", ""lastSyncTime"": """" }</code></pre>
     </div>
 
-    <div class="endpoint">
-        <span class="method">POST</span> <span class="path">/api/mark-used</span>
-        <p class="desc">标记邮箱为已使用（移动端上报）。调用后该邮箱从可用列表中移除，不再分配。</p>
-        <table class="params">
-            <tr><th>参数</th><th>类型</th><th>位置</th><th>说明</th></tr>
-            <tr><td><code>email</code></td><td>string</td><td>JSON body 或 Query</td><td>要标记的邮箱地址</td></tr>
-        </table>
-        <p class="resp-label">请求示例：</p>
-        <pre><code>curl -X POST http://localhost:5000/api/mark-used \
-  -H "Content-Type: application/json" \
-  -d '{"email": "user@outlook.com"}'</code></pre>
-        <p class="resp-label">成功响应：</p>
-        <pre><code>{ "success": true, "message": "已标记为已使用" }</code></pre>
-        <p class="resp-label">失败响应：</p>
-        <pre><code>{ "success": false, "message": "未找到该邮箱账户" }</code></pre>
+    <div class=""section"">🎯 对标接口</div>
+
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/target/allocate</span>
+        <p class=""desc"">分配一个可用对标。原子操作防止并发冲突，返回后标记为已用，不可重复分配。</p>
+        <p class=""resp-label"">成功响应：</p>
+        <pre><code>{ ""success"": true, ""content"": ""keyword123"" }</code></pre>
+        <p class=""resp-label"">无可用对标：</p>
+        <pre><code>{ ""success"": false, ""message"": ""无可用对标"" }</code></pre>
+        <button class=""try-btn"" onclick=""tryApi('target/allocate', this)"">▶ 在线测试</button>
+        <div class=""result"" id=""result-target/allocate""></div>
+    </div>
+
+    <div class=""endpoint"">
+        <span class=""method"">GET</span> <span class=""path"">/api/target/count</span>
+        <p class=""desc"">查询对标的可用、已用和总数量。</p>
+        <p class=""resp-label"">响应：</p>
+        <pre><code>{ ""success"": true, ""available"": 150, ""used"": 1520, ""total"": 1670 }</code></pre>
+        <button class=""try-btn"" onclick=""tryApi('target/count', this)"">▶ 在线测试</button>
+        <div class=""result"" id=""result-target/count""></div>
     </div>
 
     <script>
@@ -226,15 +282,14 @@ public class HttpServer
                 })
                 .catch(function(err) {
                     result.classList.add('active');
-                    result.innerHTML = '<pre><code style="color:#f85149">请求失败: ' + err.message + '</code></pre>';
+                    result.innerHTML = '<pre><code style=""color:#f85149"">请求失败: ' + err.message + '</code></pre>';
                     btn.textContent = '▶ 重试';
                     btn.disabled = false;
                 });
         }
     </script>
 </body>
-</html>
-""";
+</html>";
     }
 
     private void HandleAllocateEmail(HttpListenerResponse response)
@@ -253,6 +308,53 @@ public class HttpServer
             catch { }
             SendResponse(response, 200, new { success = false, message = "邮箱已全部使用，请导入更多账户。" });
         }
+    }
+
+    private void HandleListAccounts(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        int.TryParse(request.QueryString["page"] ?? "1", out var page);
+        int.TryParse(request.QueryString["pageSize"] ?? "30", out var pageSize);
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 30;
+
+        var accounts = _dbService.GetAccountsPaged(page, pageSize);
+        var total = _dbService.GetAccountsCount();
+        var totalPages = (total + pageSize - 1) / pageSize;
+
+        var items = accounts.Select(a => new
+        {
+            email = a.Email,
+            status = a.Status,
+            allocated = a.Allocated,
+            isUsed = a.IsUsed,
+            lastCode = a.LastCode,
+            lastSyncTime = a.LastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "",
+        });
+
+        SendResponse(response, 200, new
+        {
+            success = true,
+            page,
+            pageSize,
+            total,
+            totalPages,
+            items,
+        });
+    }
+
+    private void HandleTargetAllocate(HttpListenerResponse response)
+    {
+        var content = _kwService.AllocateOne();
+        if (content != null)
+            SendResponse(response, 200, new { success = true, content });
+        else
+            SendResponse(response, 200, new { success = false, message = "无可用对标" });
+    }
+
+    private void HandleTargetCount(HttpListenerResponse response)
+    {
+        var counts = _kwService.GetCounts();
+        SendResponse(response, 200, new { success = true, available = counts.Available, used = counts.Used, total = counts.Total });
     }
 
     private async Task HandleGetCode(HttpListenerRequest request, HttpListenerResponse response)
@@ -302,48 +404,6 @@ public class HttpServer
             lastCode = account.LastCode,
             lastSyncTime = account.LastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""
         });
-    }
-
-    private async Task HandleMarkUsed(HttpListenerRequest request, HttpListenerResponse response)
-    {
-        try
-        {
-            using var reader = new StreamReader(request.InputStream);
-            var body = await reader.ReadToEndAsync();
-            var data = JsonSerializer.Deserialize<MarkUsedRequest>(body, JsonOpts);
-            var email = data?.Email ?? request.QueryString["email"] ?? "";
-
-            if (string.IsNullOrEmpty(email))
-            {
-                SendResponse(response, 400, new { success = false, message = "缺少 email 参数" });
-                return;
-            }
-
-            var account = _dbService.GetAccountByEmail(email);
-            if (account == null)
-            {
-                SendResponse(response, 404, new { success = false, message = "未找到该邮箱账户" });
-                return;
-            }
-
-            _dbService.MarkAccountAsUsed(account.Id);
-
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                _mainWindowVm?.MarkAsUsedCommand.Execute(account);
-            });
-
-            SendResponse(response, 200, new { success = true, message = "已标记为已使用" });
-        }
-        catch (Exception ex)
-        {
-            SendResponse(response, 500, new { success = false, message = ex.Message });
-        }
-    }
-
-    private class MarkUsedRequest
-    {
-        public string? Email { get; set; }
     }
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

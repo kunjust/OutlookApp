@@ -1,0 +1,164 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:OutlookApp.ViewModels"
+             xmlns:models="using:OutlookApp.Models"
+             x:DataType="vm:KeywordViewModel"
+             x:Class="OutlookApp.Views.KeywordPanel"
+             Background="#0D1117">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="SurfaceBrush">#161B22</SolidColorBrush>
+        <SolidColorBrush x:Key="BorderBrush">#30363D</SolidColorBrush>
+        <SolidColorBrush x:Key="AccentBrush">#58A6FF</SolidColorBrush>
+        <SolidColorBrush x:Key="SuccessBrush">#3FB950</SolidColorBrush>
+        <SolidColorBrush x:Key="DangerBrush">#F85149</SolidColorBrush>
+        <SolidColorBrush x:Key="TextPrimaryBrush">#E6EDF3</SolidColorBrush>
+        <SolidColorBrush x:Key="TextSecondaryBrush">#8B949E</SolidColorBrush>
+        <SolidColorBrush x:Key="BtnBgBrush">#21262D</SolidColorBrush>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- 顶部统计 -->
+        <Border Grid.Row="0" Background="#010409" Padding="16,10"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Background="#23863620" CornerRadius="4" Padding="10,4">
+                    <TextBlock FontSize="13">
+                        <Run Text="可用 " Foreground="{StaticResource SuccessBrush}"/>
+                        <Run Text="{Binding AvailableCount}" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
+                    </TextBlock>
+                </Border>
+                <Border Background="#F8514920" CornerRadius="4" Padding="10,4">
+                    <TextBlock FontSize="13">
+                        <Run Text="已用 " Foreground="{StaticResource DangerBrush}"/>
+                        <Run Text="{Binding UsedCount}" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                    </TextBlock>
+                </Border>
+                <TextBlock FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center">
+                    共 <Run Text="{Binding TotalCount}" FontWeight="Bold"/> 条
+                </TextBlock>
+                <Border Background="{StaticResource BtnBgBrush}" CornerRadius="4" Padding="10,4" Margin="24,0,0,0">
+                    <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- 输入区域 + 操作栏 -->
+        <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="16,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <CheckBox IsChecked="{Binding IsAllSelected}" Content="全选"
+                              Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center"/>
+                    <Button Content="恢复选中" Command="{Binding RestoreSelectedCommand}"
+                            Background="{StaticResource SuccessBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Height="28" Padding="12,0"/>
+                    <Button Content="删除选中" Command="{Binding DeleteSelectedCommand}"
+                            Background="{StaticResource DangerBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Height="28" Padding="12,0"/>
+                    <Rectangle Width="1" Height="20" Fill="{StaticResource BorderBrush}" Margin="8,0"/>
+                    <TextBox Text="{Binding SearchText}" PlaceholderText="搜索..."
+                             Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
+                             BorderBrush="{StaticResource BorderBrush}" FontSize="12" Height="28" Width="120"/>
+                    <Button Content="⟳ 刷新" Command="{Binding RefreshAllCommand}"
+                            Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource TextPrimaryBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" FontSize="12" Height="28" Padding="10,0"/>
+                </StackPanel>
+
+                <Border DockPanel.Dock="Right" Width="80" Margin="8,0,0,0" VerticalAlignment="Top">
+                    <Button Content="保存" Command="{Binding SaveKeywordsCommand}"
+                            Background="{StaticResource AccentBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="14" FontWeight="Bold" Height="32" CornerRadius="4"/>
+                </Border>
+                <TextBox Text="{Binding InputText}"
+                         PlaceholderText="每行输入一个对标（最多100字符），支持批量粘贴..."
+                         Background="#0D1117" Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BorderBrush}" FontSize="13"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         Height="80" CornerRadius="4"/>
+            </DockPanel>
+        </Border>
+
+        <!-- 列表 -->
+        <Grid Grid.Row="2" RowDefinitions="32,*">
+            <Border Grid.Row="0" Padding="16,4" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="32,48,60,*,90,80">
+                    <TextBlock Grid.Column="1" Text="#" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="状态" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="3" Text="对标内容" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <TextBlock Grid.Column="4" Text="使用时间" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="5" Text="操作" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1">
+                <ListBox ItemsSource="{Binding Keywords}" BorderThickness="0" Background="Transparent">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#1C2533"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#1C2128"/>
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:KeywordItem">
+                            <Border Padding="16,6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                                <Grid ColumnDefinitions="32,48,60,*,90,80">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                              VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Id}" FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+
+                                    <!-- 状态标签：简单用不同颜色文字表示，不用 DataTrigger -->
+                                    <Border Grid.Column="2" CornerRadius="4" Padding="8,2"
+                                            Background="#23863620" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayStatus}" FontSize="10"
+                                                   Foreground="{StaticResource SuccessBrush}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+
+                                    <TextBlock Grid.Column="3" Text="{Binding Content}" FontSize="12"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" Margin="8,0,8,0"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding DisplayUsedAt}" FontSize="10"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="5" Orientation="Horizontal"
+                                                HorizontalAlignment="Center" Spacing="4" VerticalAlignment="Center">
+                                        <Button Content="恢复" FontSize="10" Height="22" MinWidth="32" Padding="4,0"
+                                                Background="{StaticResource BtnBgBrush}"
+                                                Foreground="{StaticResource SuccessBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                Command="{Binding $parent[UserControl].DataContext.RestoreKeywordCommand}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="删除" FontSize="10" Height="22" MinWidth="32" Padding="4,0"
+                                                Background="{StaticResource BtnBgBrush}"
+                                                Foreground="{StaticResource DangerBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                Command="{Binding $parent[UserControl].DataContext.DeleteKeywordCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

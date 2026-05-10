@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OutlookApp.ViewModels"
+        x:Class="OutlookApp.Views.ActivationWindow"
+        x:DataType="vm:ActivationViewModel"
+        Title="激活 — IKC"
+        Width="420" Height="340"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Background="#0D1117">
+
+    <Window.Styles>
+        <Style Selector="Button">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style Selector="Button:pointerover">
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+        <Style Selector="Button:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+    </Window.Styles>
+
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="44,0" Spacing="20">
+        <!-- 标题区域 -->
+        <TextBlock Text="IKC" FontSize="22" FontWeight="Bold"
+                   Foreground="#E6EDF3" HorizontalAlignment="Center"/>
+        <TextBlock Text="激活卡密后即可使用" FontSize="13"
+                   Foreground="#8B949E" HorizontalAlignment="Center"/>
+
+        <!-- 卡密输入框 -->
+        <TextBox Text="{Binding CardKey}"
+                 PlaceholderText="请输入卡密"
+                 Foreground="#E6EDF3"
+                 Background="#161B22"
+                 BorderBrush="#30363D"
+                 BorderThickness="1"
+                 Padding="14,12"
+                 FontSize="14"/>
+
+        <!-- 激活按钮 -->
+        <Button Content="激活"
+                Command="{Binding ActivateCommand}"
+                IsEnabled="{Binding CanActivate}"
+                Background="#58A6FF"
+                Foreground="White"
+                BorderThickness="0"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"/>
+
+        <!-- 加载中 -->
+        <TextBlock Text="正在验证卡密..."
+                   Foreground="#8B949E"
+                   HorizontalAlignment="Center"
+                   FontSize="12"
+                   IsVisible="{Binding IsLoading}"/>
+
+        <!-- 状态消息 -->
+        <Border Background="#1A21262D" CornerRadius="8" Padding="14,10"
+                IsVisible="{Binding HasMessage}">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{Binding MessageColor}"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       HorizontalAlignment="Center"/>
+        </Border>
+    </StackPanel>
+</Window>

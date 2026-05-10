@@ -2,13 +2,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OutlookApp.ViewModels"
         xmlns:models="using:OutlookApp.Models"
+        xmlns:views="using:OutlookApp.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
         x:Class="OutlookApp.Views.MainWindow"
         x:Name="ThisWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Outlook邮件管理"
+        Title="{Binding WindowTitle, FallbackValue='IKC'}"
         Width="1100" Height="700"
         MinWidth="860" MinHeight="500"
         WindowStartupLocation="CenterScreen"
@@ -32,27 +33,49 @@
         <Border Grid.Row="0" Background="#010409"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <DockPanel LastChildFill="True" Margin="16,0">
-                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="4" DockPanel.Dock="Left" VerticalAlignment="Center">
                     <TextBlock Text="&#x1f4e8;" FontSize="16" VerticalAlignment="Center"/>
-                    <TextBlock Text="Outlook 邮件管理" FontSize="15" FontWeight="Bold"
+                    <TextBlock Text="IKC" FontSize="15" FontWeight="Bold"
                                Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                    <Rectangle Width="1" Height="20" Fill="{StaticResource BorderBrush}" Margin="6,0"/>
+                    <Rectangle Width="1" Height="20" Fill="{StaticResource BorderBrush}" Margin="8,0"/>
+                    <!-- 面板切换 -->
+                    <Button Content="邮件" Command="{Binding TogglePanelCommand}"
+                            Background="{StaticResource AccentBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="13" Height="28" Padding="12,0" FontWeight="Bold"
+                            IsVisible="{Binding ShowKeywordPanel}"/>
+                    <Button Content="对标" Command="{Binding TogglePanelCommand}"
+                            Background="{StaticResource AccentBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="13" Height="28" Padding="12,0" FontWeight="Bold"
+                            IsVisible="{Binding ShowEmailPanel}"/>
+                    <Rectangle Width="1" Height="20" Fill="{StaticResource BorderBrush}" Margin="4,0"
+                               IsVisible="{Binding ShowEmailPanel}"/>
                     <Button Content="＋ 导入账号" Command="{Binding ImportAccountCommand}"
                             Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource TextPrimaryBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" FontSize="13" Height="32" Padding="14,0"/>
+                            BorderBrush="{StaticResource BorderBrush}" FontSize="12" Height="28" Padding="10,0"
+                            IsVisible="{Binding ShowEmailPanel}"/>
                     <Button Content="⟳ 全部刷新" Command="{Binding RefreshAllCommand}"
                             Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource TextPrimaryBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" FontSize="13" Height="32" Padding="14,0"/>
+                            BorderBrush="{StaticResource BorderBrush}" FontSize="12" Height="28" Padding="10,0"
+                            IsVisible="{Binding ShowEmailPanel}"/>
                     <Button Content="删除选中" Command="{Binding DeleteSelectedAccountsCommand}"
                             IsVisible="{Binding HasSelectedAny}"
                             Background="{StaticResource DangerBrush}" Foreground="White"
-                            BorderThickness="0" FontSize="13" Height="32" Padding="14,0"/>
+                            BorderThickness="0" FontSize="12" Height="28" Padding="10,0"/>
                 </StackPanel>
-                <Border DockPanel.Dock="Right" VerticalAlignment="Center"
-                        Background="{StaticResource BtnBgBrush}" CornerRadius="4" Padding="10,4">
-                    <TextBlock Text="{Binding StatusText}" FontSize="12"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                </Border>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="检查更新" Command="{Binding CheckUpdateCommand}"
+                            Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource TextPrimaryBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" FontSize="12" Height="28" Padding="10,0"
+                            IsVisible="{Binding IsActivated}"/>
+                    <Button Content="解绑" Command="{Binding UnbindCommand}"
+                            Background="{StaticResource DangerBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Height="28" Padding="10,0"
+                            IsVisible="{Binding IsActivated}"/>
+                    <Border Background="{StaticResource BtnBgBrush}" CornerRadius="4" Padding="10,4">
+                        <TextBlock Text="{Binding StatusText}" FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Border>
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -75,7 +98,9 @@
         </Border>
 
         <!-- 主内容区域 -->
-        <Grid Grid.Row="2" ColumnDefinitions="340,4,*">
+        <Grid Grid.Row="2">
+            <!-- 邮件管理面板 -->
+            <Grid ColumnDefinitions="340,4,*" IsVisible="{Binding ShowEmailPanel}" x:Name="EmailPanel">
             <!-- 左侧：账号列表 -->
             <Border Grid.Column="0" Background="{StaticResource SurfaceBrush}"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
@@ -90,7 +115,7 @@
                                        Margin="8,0,0,0"/>
                             <Border Grid.Column="2" Background="{StaticResource BtnBgBrush}" CornerRadius="10"
                                     Padding="8,2" VerticalAlignment="Center" Margin="0,0,8,0">
-                                <TextBlock Text="{Binding Accounts.Count, StringFormat={}{0} 个}"
+                                <TextBlock Text="{Binding AccountTotal, StringFormat={}{0} 个}"
                                            FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
                             </Border>
                             <TextBlock Grid.Column="3" Text="全选" FontSize="11"
@@ -100,8 +125,9 @@
                     </Border>
 
                     <ScrollViewer>
-                        <ListBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
-                                 BorderThickness="0" Background="Transparent" Margin="8,8,8,0">
+                        <DockPanel>
+                            <ListBox DockPanel.Dock="Top" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                                     BorderThickness="0" Background="Transparent" Margin="8,8,8,0">
                             <ListBox.Styles>
                                 <Style Selector="ListBoxItem">
                                     <Setter Property="Padding" Value="0"/>
@@ -175,7 +201,37 @@
                                     </Border>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
-                        </ListBox>
+                            </ListBox>
+
+                            <Border DockPanel.Dock="Bottom" Padding="8,6" Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <Button Grid.Column="0" Content="‹" FontSize="13"
+                                            Command="{Binding PrevAccountPageCommand}"
+                                            IsEnabled="{Binding HasPrevPage}"
+                                            Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource AccentBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}" Width="48" Height="28"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding AccountPageNum}" FontSize="12"
+                                                   Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="/" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding AccountTotalPages}" FontSize="12"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center" Margin="4,0,0,0">
+                                            <Run Text="页，共"/> <Run Text="{Binding AccountTotal}"/> <Run Text="个账号"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="›" FontSize="13"
+                                            Command="{Binding NextAccountPageCommand}"
+                                            IsEnabled="{Binding HasNextPage}"
+                                            Background="{StaticResource BtnBgBrush}" Foreground="{StaticResource AccentBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}" Width="48" Height="28"/>
+                                </Grid>
+                            </Border>
+                        </DockPanel>
                     </ScrollViewer>
                 </DockPanel>
             </Border>
@@ -309,6 +365,11 @@
                     </StackPanel>
                 </Border>
             </Grid>
+            </Grid>
+
+            <!-- 对标管理面板 -->
+            <views:KeywordPanel DataContext="{Binding KeywordViewModel}"
+                                IsVisible="{Binding $parent[Grid].DataContext.ShowKeywordPanel}"/>
         </Grid>
     </Grid>
 </Window>
