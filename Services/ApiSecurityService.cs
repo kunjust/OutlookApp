@@ -26,7 +26,7 @@ public static class ApiSecurityService
     /// <summary>
     /// 卡密 API 服务端地址（正式环境）
     /// </summary>
-    public const string ServerBase = "http://localhost:5001";
+    public const string ServerBase = "http://km.frp.ikechen.com:8099";
 
     /// <summary>
     /// 生成签名（与服务端 SignatureHelper 一致）。

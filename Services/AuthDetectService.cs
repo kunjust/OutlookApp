@@ -13,12 +13,20 @@ public class AuthDetectService
     private readonly ImapEmailService _imap;
     private readonly GraphEmailService _graph;
 
+    /// <summary>
+    /// 初始化检测服务，创建 IMAP 和 Graph API 客户端实例
+    /// </summary>
     public AuthDetectService()
     {
         _imap = new ImapEmailService();
         _graph = new GraphEmailService();
     }
 
+    /// <summary>
+    /// 自动检测邮箱可用协议，依次尝试 XOAUTH2 → 密码认证
+    /// </summary>
+    /// <param name="account">邮箱账号信息</param>
+    /// <returns>检测结果，包含成功状态和检测日志</returns>
     public async Task<DetectionResult> DetectAsync(EmailAccount account)
     {
         var result = new DetectionResult();
@@ -28,8 +36,9 @@ public class AuthDetectService
         if (!string.IsNullOrEmpty(account.Token) && !string.IsNullOrEmpty(account.ClientId))
         {
             logs.Add(new DetectLog { Protocol = "刷新 Token", IsTesting = true });
-            await Task.Delay(300);
+            await Task.Delay(30);
             string? accessToken = null;
+            // 尝试刷新 Token
             try
             {
                 accessToken = await _graph.RefreshTokenAsync(account);
@@ -41,6 +50,7 @@ public class AuthDetectService
                     Message = accessToken != null ? "Token 刷新成功" : "Token 刷新失败（可能已过期）"
                 };
             }
+            // 捕获 Token 刷新异常
             catch (Exception ex)
             {
                 logs[^1] = new DetectLog { Protocol = "刷新 Token", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
@@ -50,6 +60,7 @@ public class AuthDetectService
             {
                 logs.Add(new DetectLog { Protocol = "IMAP XOAUTH2", IsTesting = true });
                 await Task.Delay(300);
+                // 尝试 XOAUTH2 验证
                 try
                 {
                     var ok = await _imap.VerifyXoauth2Async(account.Email, accessToken);
@@ -69,6 +80,7 @@ public class AuthDetectService
                         return result;
                     }
                 }
+                // 捕获 XOAUTH2 验证异常
                 catch (Exception ex)
                 {
                     logs[^1] = new DetectLog { Protocol = "IMAP XOAUTH2", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
@@ -81,6 +93,7 @@ public class AuthDetectService
         {
             logs.Add(new DetectLog { Protocol = "IMAP (密码)", IsTesting = true });
             await Task.Delay(300);
+            // 尝试密码认证
             try
             {
                 var ok = await _imap.VerifyAsync(account);
@@ -100,6 +113,7 @@ public class AuthDetectService
                     return result;
                 }
             }
+            // 捕获密码认证异常
             catch (Exception ex)
             {
                 logs[^1] = new DetectLog { Protocol = "IMAP (密码)", IsTesting = false, Success = false, Message = $"异常: {ex.Message}" };
@@ -114,7 +128,7 @@ public class AuthDetectService
 }
 
 /// <summary>
-/// 邮箱协议自动检测服务，依次尝试 XOAUTH2 和密码认证
+/// 检测日志条目，记录每个协议的检测过程和结果
 /// </summary>
 public class DetectLog
 {
@@ -126,7 +140,7 @@ public class DetectLog
 }
 
 /// <summary>
-/// 邮箱协议自动检测服务，依次尝试 XOAUTH2 和密码认证
+/// 协议检测结果，包含成功状态、选中协议和完整日志
 /// </summary>
 public class DetectionResult
 {
