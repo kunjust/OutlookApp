@@ -10,6 +10,9 @@ using OutlookApp.Services;
 
 namespace OutlookApp.ViewModels;
 
+/// <summary>
+/// 关键词管理面板 ViewModel
+/// </summary>
 public partial class KeywordViewModel : ViewModelBase
 {
     private readonly KeywordService _kwService;

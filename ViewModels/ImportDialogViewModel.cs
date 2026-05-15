@@ -11,6 +11,9 @@ using OutlookApp.Services;
 
 namespace OutlookApp.ViewModels;
 
+/// <summary>
+/// 导入对话框 ViewModel，处理批量导入和格式解析
+/// </summary>
 public partial class ImportDialogViewModel : ViewModelBase
 {
     public event Func<Task<string?>>? FilePicked;

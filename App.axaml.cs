@@ -13,6 +13,9 @@ using OutlookApp.Views;
 
 namespace OutlookApp;
 
+/// <summary>
+/// Avalonia 应用程序入口，管理启动流程、激活校验和主窗口生命周期
+/// </summary>
 public partial class App : Application
 {
     public static Window? MainWindow { get; private set; }

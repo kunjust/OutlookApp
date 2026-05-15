@@ -6,6 +6,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// SQLite 数据库服务，管理邮箱账号和邮件数据的增删改查
+/// </summary>
 public class DatabaseService
 {
     private readonly string _connectionString;
@@ -109,7 +112,7 @@ public class DatabaseService
         using var conn = new SqliteConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE IsUsed=0 OR IsUsed IS NULL ORDER BY CreatedAt ASC";
+        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE IsUsed=0 OR IsUsed IS NULL ORDER BY Email ASC";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -238,7 +241,7 @@ public class DatabaseService
         conn.Open();
         using var cmd = conn.CreateCommand();
         var offset = (page - 1) * pageSize;
-        cmd.CommandText = @"SELECT * FROM EmailAccounts WHERE IsUsed=0 ORDER BY CreatedAt ASC LIMIT $limit OFFSET $offset";
+        cmd.CommandText = @"SELECT * FROM EmailAccounts WHERE IsUsed=0 ORDER BY Email ASC LIMIT $limit OFFSET $offset";
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", offset);
         using var reader = cmd.ExecuteReader();

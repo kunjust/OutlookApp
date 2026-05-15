@@ -5,6 +5,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// 邮箱协议自动检测服务，依次尝试 XOAUTH2 和密码认证
+/// </summary>
 public class AuthDetectService
 {
     private readonly ImapEmailService _imap;
@@ -110,6 +113,9 @@ public class AuthDetectService
     }
 }
 
+/// <summary>
+/// 邮箱协议自动检测服务，依次尝试 XOAUTH2 和密码认证
+/// </summary>
 public class DetectLog
 {
     public string Protocol { get; set; } = "";
@@ -119,6 +125,9 @@ public class DetectLog
     public string Message { get; set; } = "";
 }
 
+/// <summary>
+/// 邮箱协议自动检测服务，依次尝试 XOAUTH2 和密码认证
+/// </summary>
 public class DetectionResult
 {
     public bool Success { get; set; }

@@ -5,6 +5,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// 关键词/对标数据 CRUD 服务
+/// </summary>
 public class KeywordService
 {
     private readonly string _connectionString;

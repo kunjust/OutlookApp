@@ -2,6 +2,10 @@
 using System;
 using System.Threading.Tasks;
 
+/// <summary>
+/// 应用程序入口。
+/// 正常模式启动 Avalonia UI；--test-signature 运行签名诊断。
+/// </summary>
 namespace OutlookApp;
 
 sealed class Program

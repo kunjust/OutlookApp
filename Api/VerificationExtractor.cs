@@ -8,6 +8,9 @@ using OutlookApp.Services;
 
 namespace OutlookApp.Api;
 
+/// <summary>
+/// 从邮件正文中提取 6 位验证码
+/// </summary>
 public class VerificationExtractor
 {
     private readonly string _connectionString;

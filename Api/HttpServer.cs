@@ -10,6 +10,9 @@ using OutlookApp.ViewModels;
 
 namespace OutlookApp.Api;
 
+/// <summary>
+/// 内置 HTTP API 服务器（端口 5000），供移动端调用
+/// </summary>
 public class HttpServer
 {
     private readonly HttpListener _listener;

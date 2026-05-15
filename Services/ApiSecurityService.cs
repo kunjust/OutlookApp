@@ -7,10 +7,13 @@ namespace OutlookApp.Services;
 /// <summary>
 /// 卡密 API 安全工具：SHA256 签名生成 + AES-CBC 响应解密。
 /// 产品密钥由接口分配，代码中写死后可通过更新常量替换。
-/// 
+///
 /// 签名算法（来自服务端 SignatureHelper）：
 ///   SHA256(body + "|" + apiResponseKey + "|" + timestamp)
 ///   注意：是 SHA256，不是 HMAC-SHA256，且使用 "|" 分隔。
+/// 
+/// 响应加密（来自服务端 EncryptionHelper）：
+///   AES-CBC, Key=SHA256(ApiResponseKey), IV=密文前16字节, PKCS7 填充
 /// </summary>
 public static class ApiSecurityService
 {
@@ -21,19 +24,15 @@ public static class ApiSecurityService
     public const string ProductKey = "ChangeThisToARandom32CharKey!!!";
 
     /// <summary>
-    /// 卡密 API 服务端地址
+    /// 卡密 API 服务端地址（正式环境）
     /// </summary>
     public const string ServerBase = "http://localhost:5001";
 
     /// <summary>
-    /// 生成签名（与服务端 SignatureHelper.GenerateSignature 一致）。
-    /// 算法：SHA256(body + "|" + apiResponseKey + "|" + timestamp)，输出小写 hex。
-    /// 注意：使用 "|" 分隔，不是直接拼接，也不是 HMAC。
+    /// 生成签名（与服务端 SignatureHelper 一致）。
+    /// 算法：SHA256(body + "|" + key + "|" + timestamp)
+    /// 输出 64 位小写 hex 字符串。
     /// </summary>
-    /// <param name="body">请求体（GET 请求为空字符串）</param>
-    /// <param name="timestamp">当前 Unix 时间戳（秒）</param>
-    /// <param name="productKey">产品密钥（ApiResponseKey）</param>
-    /// <returns>64 位小写 hex 签名</returns>
     public static string GenerateSignature(string body, long timestamp, string? productKey = null)
     {
         var key = productKey ?? ProductKey;

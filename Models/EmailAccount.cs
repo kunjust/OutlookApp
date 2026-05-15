@@ -3,6 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace OutlookApp.Models;
 
+/// <summary>
+/// 邮箱账号模型，包含登录凭证和状态
+/// </summary>
 public partial class EmailAccount : ObservableObject
 {
     [ObservableProperty]

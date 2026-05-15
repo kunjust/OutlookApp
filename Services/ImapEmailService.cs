@@ -11,6 +11,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// IMAP 邮件获取服务，支持密码认证和 XOAUTH2 两种方式
+/// </summary>
 public partial class ImapEmailService : IEmailService
 {
     public static ImapEmailService Create() => new();

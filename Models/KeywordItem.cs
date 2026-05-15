@@ -3,6 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace OutlookApp.Models;
 
+/// <summary>
+/// 关键词/对标条目模型
+/// </summary>
 public partial class KeywordItem : ObservableObject
 {
     [ObservableProperty]

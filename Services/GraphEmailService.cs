@@ -7,6 +7,9 @@ using OutlookApp.Models;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// Microsoft Graph API 邮件服务（OAuth2 Token 刷新）
+/// </summary>
 public class GraphEmailService : IEmailService
 {
     private readonly HttpClient _http;

@@ -7,6 +7,9 @@ using OutlookApp.Services;
 
 namespace OutlookApp.Services;
 
+/// <summary>
+/// 按需同步邮件服务，用于获取验证码邮件
+/// </summary>
 public class EmailSyncOnDemand
 {
     private readonly DatabaseService _dbService;

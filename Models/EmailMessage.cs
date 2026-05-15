@@ -3,6 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace OutlookApp.Models;
 
+/// <summary>
+/// 邮件消息模型
+/// </summary>
 public partial class EmailMessage : ObservableObject
 {
     [ObservableProperty]
