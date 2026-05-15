@@ -227,7 +227,12 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             else
             {
-                _db.DeleteAccount(acc.Id);
+                // 检测失败 → 标记为失败，不删除（用户可手动重试）
+                acc.Status = "Failed";
+                acc.StatusMessage = detection.StatusMessage;
+                acc.AuthType = "";
+                _db.UpdateAccountStatus(acc.Id, acc.Status, acc.StatusMessage, acc.AuthType);
+                _allAccounts.Add(acc);
                 failCount++;
             }
         }
