@@ -227,12 +227,13 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             else
             {
-                // 检测失败 → 标记为失败，不删除（用户可手动重试）
-                acc.Status = "Failed";
-                acc.StatusMessage = detection.StatusMessage;
-                acc.AuthType = "";
-                _db.UpdateAccountStatus(acc.Id, acc.Status, acc.StatusMessage, acc.AuthType);
-                _allAccounts.Add(acc);
+                // 输出失败详情到控制台，方便排查
+                var errorMsg = $"❌ {acc.Email} 检测失败";
+                foreach (var log in detection.LogMessages)
+                    errorMsg += $" | {log.Protocol}: {log.Message}";
+                Console.WriteLine(errorMsg);
+                StatusText = $"失败: {acc.Email} → {detection.StatusMessage}";
+                _db.DeleteAccount(acc.Id);
                 failCount++;
             }
         }
