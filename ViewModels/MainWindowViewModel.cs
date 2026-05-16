@@ -227,11 +227,17 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             else
             {
-                // 输出失败详情到控制台，方便排查
-                var errorMsg = $"❌ {acc.Email} 检测失败";
+                // 输出失败详情到控制台，包含完整堆栈
+                Console.WriteLine($"❌ {acc.Email} 检测失败");
                 foreach (var log in detection.LogMessages)
-                    errorMsg += $" | {log.Protocol}: {log.Message}";
-                Console.WriteLine(errorMsg);
+                    Console.WriteLine($"  ├─ {log.Protocol}: {(log.Success ? "✅" : "❌")}");
+                foreach (var log in detection.LogMessages)
+                    if (!log.Success)
+                    {
+                        var lines = log.Message.Split('\n');
+                        foreach (var line in lines)
+                            Console.WriteLine($"  │  {line}");
+                    }
                 StatusText = $"失败: {acc.Email} → {detection.StatusMessage}";
                 _db.DeleteAccount(acc.Id);
                 failCount++;
