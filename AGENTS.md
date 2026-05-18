@@ -90,6 +90,40 @@ dotnet add package <name> # 安装 NuGet 包
 3. **Attachments 提取** -- 当前 `HasAttachments` 硬编码为 false
 4. **系统剪贴板集成** -- `CopyEmailCommand` 仅更新状态，未实际复制
 
+## HTTP API（5000 端口，局域网可访问）
+
+| 接口 | 说明 |
+|---|---|
+| `GET /api/email` | 分配一个未使用邮箱 |
+| `GET /api/accounts?page=&pageSize=` | 分页列出邮箱 |
+| `GET /api/code?email=&keyword=&minutes=` | 取最新验证码（默认 30 分钟内，可按 from/subject/body 关键词过滤） |
+| `GET /api/status?email=` | 查邮箱分配状态 |
+| `GET /api/target/allocate` | 原子分配一条对标关键词 |
+| `GET /api/target/count` | 关键词可用/已用/总数 |
+| `GET /docs` | 在线接口文档 |
+
+### 监听绑定策略（`HttpServer.ConfigurePrefixes`）
+
+1. 先 probe 通配符 `http://*:5000/`，能绑定则直接用；
+2. 不能（Windows URL ACL 限制）→ 退化为枚举 `WindowsNetworkHelper.GetSortedLanIPv4()`，给每个 IP 单独绑定 `http://192.168.x.x:5000/`，loopback 也一起；
+3. 单 IP 绑定无需管理员权限，绕开 URL ACL。
+4. 启动后 `App.axaml.cs` 调 `WindowsNetworkHelper.TryRegisterFirewallRule(5000)` 尝试自动注册 Windows 防火墙入站规则（非管理员静默失败）；
+5. UI 状态栏会显示所有实际可访问 URL 列表。
+
+如果用户仍然在局域网访问不到，提示用管理员 CMD 跑：
+```
+netsh http add urlacl url=http://*:5000/ user=Everyone
+netsh advfirewall firewall add rule name="OutlookApp HTTP API" dir=in action=allow protocol=TCP localport=5000
+```
+
+## 验证码提取（`Api/VerificationExtractor.cs` + `Services/EmailSyncOnDemand.cs`）
+
+- **不再硬编码 instagram**：`/api/code` 通过 `keyword` 查询参数按需过滤；不传则匹配所有发件人
+- **时间窗口**：默认只看最近 30 分钟内的邮件，可用 `minutes` 参数调整
+- **正则优先级**：`NNN-NNN / NNN NNN / NNN.NNN` → 单独 6 位 → 单独 4~8 位
+- **过滤伪验证码**：排除全重复（000000）和年份（1900~2099）
+- **认证链路**：`EmailSyncOnDemand` 内部按 密码 → `GraphEmailService.RefreshTokenAsync` → IMAP XOAUTH2 顺序尝试；ImapEmailService 不再吞异常，由 EmailSyncOnDemand 决定 fallback
+
 ## 注意事项
 
 - macOS 上开发，使用 Avalonia（非 WPF，WPF 仅限 Windows）

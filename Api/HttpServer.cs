@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text.Json;
@@ -15,7 +16,7 @@ namespace OutlookApp.Api;
 /// </summary>
 public class HttpServer
 {
-    private readonly HttpListener _listener;
+    private HttpListener _listener;
     private readonly DatabaseService _dbService;
     private readonly KeywordService _kwService;
     private readonly MainWindowViewModel _mainWindowVm;
@@ -39,15 +40,75 @@ public class HttpServer
     public HttpServer(int port, DatabaseService dbService, MainWindowViewModel mainWindowVm, bool showDocs)
         : this(port, dbService, new KeywordService(dbService.ConnectionString), mainWindowVm, showDocs) { }
 
+    /// <summary>
+    /// 实际监听到的访问 URL 列表（绑定成功后填充，给 UI 显示用）。
+    /// </summary>
+    public List<string> BoundUrls { get; } = new();
+
+    /// <summary>
+    /// 服务器监听端口。
+    /// </summary>
+    public int Port { get; }
+
     public HttpServer(int port, DatabaseService dbService, KeywordService kwService, MainWindowViewModel mainWindowVm, bool showDocs)
     {
+        Port = port;
         _dbService = dbService;
         _kwService = kwService;
         _mainWindowVm = mainWindowVm;
         _emailSync = new EmailSyncOnDemand(dbService, ImapEmailService.Create());
         _docsUrl = showDocs ? $"http://localhost:{port}/docs" : "";
         _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://*:{port}/");
+
+        ConfigurePrefixes(port);
+    }
+
+    /// <summary>
+    /// 绑定监听地址。
+    /// 策略：优先尝试 <c>http://*:port/</c> 通配符（最省心，但 Windows 非管理员通常会失败）；
+    /// 失败后退化为枚举所有本机 IPv4 + loopback 单独绑定，绕开 URL ACL 限制。
+    /// </summary>
+    private void ConfigurePrefixes(int port)
+    {
+        // 先尝试通配符绑定（probe 一次）
+        try
+        {
+            var probe = new HttpListener();
+            probe.Prefixes.Add($"http://*:{port}/");
+            probe.Start();
+            probe.Stop();
+            probe.Close();
+
+            // 通配符可用 → 正式 listener 也用通配符
+            _listener.Prefixes.Add($"http://*:{port}/");
+            BoundUrls.Add($"http://localhost:{port}");
+            foreach (var ip in WindowsNetworkHelper.GetSortedLanIPv4())
+                BoundUrls.Add($"http://{ip}:{port}");
+            return;
+        }
+        catch
+        {
+            // 通配符绑定失败（多半是 Windows URL ACL 限制）→ 走单 IP 绑定
+        }
+
+        // localhost / 127.0.0.1
+        _listener.Prefixes.Add($"http://localhost:{port}/");
+        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        BoundUrls.Add($"http://localhost:{port}");
+
+        // 所有局域网 IPv4（每个 IP 都单独绑定，绕开 URL ACL）
+        foreach (var ip in WindowsNetworkHelper.GetSortedLanIPv4())
+        {
+            try
+            {
+                _listener.Prefixes.Add($"http://{ip}:{port}/");
+                BoundUrls.Add($"http://{ip}:{port}");
+            }
+            catch
+            {
+                // 单个 IP 绑不上不致命
+            }
+        }
     }
 
     public void Start()
@@ -57,6 +118,12 @@ public class HttpServer
         _listenTask = ListenLoop(_cts.Token);
         if (!string.IsNullOrEmpty(_docsUrl))
             Console.WriteLine($"📖 API 文档: {_docsUrl}");
+        if (BoundUrls.Count > 0)
+        {
+            Console.WriteLine("✅ HTTP API 监听地址:");
+            foreach (var url in BoundUrls)
+                Console.WriteLine($"   {url}");
+        }
     }
 
     public async Task StopAsync()
@@ -225,11 +292,12 @@ public class HttpServer
 
     <div class=""endpoint"">
         <span class=""method"">GET</span> <span class=""path"">/api/code</span>
-        <p class=""desc"">获取指定邮箱的 Instagram 验证码（6 位数字）</p>
+        <p class=""desc"">获取指定邮箱最新的验证码（默认提取最近 30 分钟内的邮件，自动触发 IMAP 拉取）</p>
         <table class=""params"">
-            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
-            <tr><td><code>email</code></td><td>string</td><td>是</td><td>邮箱地址</td></tr>
-            <tr><td><code>retry</code></td><td>0/1</td><td>否</td><td>未找到时是否触发 IMAP 刷新</td></tr>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr>
+            <tr><td><code>email</code></td><td>string</td><td>是</td><td>-</td><td>邮箱地址</td></tr>
+            <tr><td><code>keyword</code></td><td>string</td><td>否</td><td>-</td><td>关键词过滤（按发件人/主题/正文模糊匹配，如 <code>instagram</code> / <code>microsoft</code>）</td></tr>
+            <tr><td><code>minutes</code></td><td>int</td><td>否</td><td>30</td><td>只看最近 N 分钟内的邮件，&lt;=0 表示不限</td></tr>
         </table>
         <p class=""resp-label"">成功响应：</p>
         <pre><code>{ ""success"": true, ""code"": ""123456"", ""time"": ""2026-05-06 10:30:00"" }</code></pre>
@@ -376,7 +444,13 @@ public class HttpServer
             return;
         }
 
-        var (success, code, receivedTime) = await _emailSync.FetchVerificationCodeAsync(account);
+        // 可选关键词过滤（按 from/subject/body 模糊匹配），不传则不过滤
+        var keyword = request.QueryString["keyword"];
+        // 时间窗口（分钟），默认 30，<=0 表示不限
+        if (!int.TryParse(request.QueryString["minutes"], out var minutes))
+            minutes = 30;
+
+        var (success, code, receivedTime) = await _emailSync.FetchVerificationCodeAsync(account, keyword, minutes);
         if (success)
             SendResponse(response, 200, new { success = true, code, time = receivedTime.ToString("yyyy-MM-dd HH:mm:ss") });
         else

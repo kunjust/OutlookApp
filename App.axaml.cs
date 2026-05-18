@@ -104,11 +104,37 @@ public partial class App : Application
         {
             HttpServer = new HttpServer(5000, DatabaseService!, KeywordService!, MainVm);
             HttpServer.Start();
-            MainVm.StatusText = $"HTTP API 已启动: http://{GetLocalIPAddress()}:5000";
+
+            // 尝试在 Windows 上自动注册防火墙规则（管理员权限才会成功，不影响应用）
+            if (WindowsNetworkHelper.IsWindows)
+            {
+                WindowsNetworkHelper.TryRegisterFirewallRule(5000);
+            }
+
+            // 给 UI 显示所有可用的局域网访问地址
+            var urls = HttpServer.BoundUrls;
+            if (urls.Count == 0)
+            {
+                MainVm.StatusText = "HTTP API 已启动，但未能枚举到访问地址";
+            }
+            else if (urls.Count == 1)
+            {
+                MainVm.StatusText = $"HTTP API 已启动: {urls[0]}";
+            }
+            else
+            {
+                MainVm.StatusText = $"HTTP API 已启动，共 {urls.Count} 个地址可访问: {string.Join(" | ", urls)}";
+            }
+            Console.WriteLine($"[HttpServer] 监听地址列表 ({urls.Count}):");
+            foreach (var u in urls)
+                Console.WriteLine($"  - {u}");
         }
         catch (Exception ex)
         {
-            MainVm.StatusText = $"HTTP API 启动失败: {ex.Message}";
+            // 关键失败要让用户看到，而不是吞掉
+            MainVm.StatusText = $"❌ HTTP API 启动失败: {ex.GetType().Name} - {ex.Message}。"
+                              + $"请用管理员权限执行: {WindowsNetworkHelper.GetManualSetupCommands(5000)}";
+            Console.WriteLine($"[HttpServer] 启动失败: {ex}");
         }
 
         MainWindow.Show();
@@ -155,19 +181,4 @@ public partial class App : Application
         activationWindow.Show();
     }
 
-    private static string GetLocalIPAddress()
-    {
-        var host = System.Net.Dns.GetHostName().Replace(".local", "");
-        try
-        {
-            var addresses = System.Net.Dns.GetHostAddresses(host);
-            foreach (var addr in addresses)
-            {
-                if (addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                    return addr.ToString();
-            }
-        }
-        catch { }
-        return "127.0.0.1";
-    }
 }

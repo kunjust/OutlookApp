@@ -57,33 +57,30 @@ public partial class ImapEmailService : IEmailService
         return await FetchByPasswordAsync(account, maxCount);
     }
 
+    /// <summary>
+    /// 通过密码认证拉取邮件。认证/网络失败会抛异常，由调用方决定是否走 fallback。
+    /// </summary>
     public async Task<List<EmailMessage>> FetchByPasswordAsync(EmailAccount account, int maxCount)
     {
-        var emails = new List<EmailMessage>();
-        try
-        {
-            using var client = new ImapClient();
-            await client.ConnectAsync(Host, Port, SecureSocketOptions.SslOnConnect);
-            await client.AuthenticateAsync(account.Email, account.Password);
-            emails = await FetchMessagesAsync(client, maxCount);
-            await client.DisconnectAsync(true);
-        }
-        catch { }
+        using var client = new ImapClient();
+        await client.ConnectAsync(Host, Port, SecureSocketOptions.SslOnConnect);
+        await client.AuthenticateAsync(account.Email, account.Password);
+        var emails = await FetchMessagesAsync(client, maxCount);
+        await client.DisconnectAsync(true);
         return emails;
     }
 
+    /// <summary>
+    /// 通过 XOAUTH2 access_token 拉取邮件。认证/网络失败会抛异常，由调用方决定是否走 fallback。
+    /// 注意：传入的必须是 access_token（已通过 RefreshTokenAsync 刷新），不是 refresh_token。
+    /// </summary>
     public async Task<List<EmailMessage>> FetchByXoauth2Async(string email, string accessToken, int maxCount)
     {
-        var emails = new List<EmailMessage>();
-        try
-        {
-            using var client = new ImapClient();
-            await client.ConnectAsync(Host, Port, SecureSocketOptions.SslOnConnect);
-            await client.AuthenticateAsync(new SaslMechanismOAuth2(email, accessToken));
-            emails = await FetchMessagesAsync(client, maxCount);
-            await client.DisconnectAsync(true);
-        }
-        catch { }
+        using var client = new ImapClient();
+        await client.ConnectAsync(Host, Port, SecureSocketOptions.SslOnConnect);
+        await client.AuthenticateAsync(new SaslMechanismOAuth2(email, accessToken));
+        var emails = await FetchMessagesAsync(client, maxCount);
+        await client.DisconnectAsync(true);
         return emails;
     }
 
