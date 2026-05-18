@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Threading;
@@ -21,9 +22,112 @@ public class HttpServer
     private readonly KeywordService _kwService;
     private readonly MainWindowViewModel _mainWindowVm;
     private readonly EmailSyncOnDemand _emailSync;
+    private readonly int _port;
     private readonly string _docsUrl;
+    private readonly string _logFile;
+    private readonly HashSet<string> _localIps;
+    private readonly List<(IPAddress network, IPAddress mask)> _physicalSubnets;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    private bool _useAllInterfaces;
+
+    private static bool IsPhysicalNic(NetworkInterfaceType type) => type
+        is NetworkInterfaceType.Ethernet
+        or NetworkInterfaceType.Wireless80211
+        or NetworkInterfaceType.GigabitEthernet
+        or NetworkInterfaceType.FastEthernetT
+        or NetworkInterfaceType.FastEthernetFx;
+
+    private static List<(IPAddress, IPAddress)> GetPhysicalSubnets()
+    {
+        var subnets = new List<(IPAddress, IPAddress)>();
+        try
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                if (!IsPhysicalNic(ni.NetworkInterfaceType)) continue;
+                var props = ni.GetIPProperties();
+                foreach (var addr in props.UnicastAddresses)
+                {
+                    if (addr.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) continue;
+                    var mask = addr.IPv4Mask;
+                    if (mask == null) continue;
+                    var ipBytes = addr.Address.GetAddressBytes();
+                    var maskBytes = mask.GetAddressBytes();
+                    var netBytes = new byte[4];
+                    for (int i = 0; i < 4; i++)
+                        netBytes[i] = (byte)(ipBytes[i] & maskBytes[i]);
+                    subnets.Add((new IPAddress(netBytes), mask));
+                }
+            }
+        }
+        catch { }
+        return subnets;
+    }
+
+    private static HashSet<string> GetLocalIps()
+    {
+        var ips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            ips.Add("127.0.0.1");
+            ips.Add("::1");
+            ips.Add("::ffff:127.0.0.1");
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                foreach (var addr in ni.GetIPProperties().UnicastAddresses)
+                {
+                    var ip = addr.Address.ToString();
+                    if (!string.IsNullOrEmpty(ip)) ips.Add(ip);
+                }
+            }
+        }
+        catch { }
+        return ips;
+    }
+
+    private static bool IpInSubnet(IPAddress ip, IPAddress network, IPAddress mask)
+    {
+        if (ip.AddressFamily != network.AddressFamily) return false;
+        var ipBytes = ip.GetAddressBytes();
+        var netBytes = network.GetAddressBytes();
+        var maskBytes = mask.GetAddressBytes();
+        for (int i = 0; i < ipBytes.Length; i++)
+        {
+            if ((byte)(ipBytes[i] & maskBytes[i]) != netBytes[i])
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 判断来源 IP 是否应放行：
+    /// 回环 ✓ | 本机任意网卡 IP ✓ | 物理子网内非本机 IP ✗ | 其他（虚拟网卡等）✓
+    /// </summary>
+    private bool IsLocalConnection(IPAddress ip)
+    {
+        if (IPAddress.IsLoopback(ip)) return true;
+        var ipStr = ip.ToString();
+        if (_localIps.Contains(ipStr)) return true;
+        foreach (var (net, mask) in _physicalSubnets)
+        {
+            if (IpInSubnet(ip, net, mask))
+                return false;
+        }
+        return true;
+    }
+
+    private void Log(string msg)
+    {
+        try
+        {
+            File.AppendAllText(_logFile, $"[{DateTime.Now:HH:mm:ss}] {msg}{Environment.NewLine}");
+        }
+        catch { }
+    }
 
     public HttpServer(int port, DatabaseService dbService, KeywordService kwService)
         : this(port, dbService, kwService, null!, false) { }
@@ -52,78 +156,76 @@ public class HttpServer
 
     public HttpServer(int port, DatabaseService dbService, KeywordService kwService, MainWindowViewModel mainWindowVm, bool showDocs)
     {
+        _port = port;
         Port = port;
         _dbService = dbService;
         _kwService = kwService;
         _mainWindowVm = mainWindowVm;
         _emailSync = new EmailSyncOnDemand(dbService, ImapEmailService.Create());
         _docsUrl = showDocs ? $"http://localhost:{port}/docs" : "";
+        _logFile = Path.Combine(Path.GetTempPath(), "OutlookApp_HttpServer.log");
+        _localIps = GetLocalIps();
+        _physicalSubnets = GetPhysicalSubnets();
         _listener = new HttpListener();
-
-        ConfigurePrefixes(port);
+        _listener = new HttpListener();
+        Log("HttpServer 构造函数完成");
     }
 
     /// <summary>
-    /// 绑定监听地址。
-    /// 策略：优先尝试 <c>http://*:port/</c> 通配符（最省心，但 Windows 非管理员通常会失败）；
-    /// 失败后退化为枚举所有本机 IPv4 + loopback 单独绑定，绕开 URL ACL 限制。
+    /// 尝试启动 HttpListener，先试通配符（需要 URL ACL），失败则回退到 localhost 模式
     /// </summary>
-    private void ConfigurePrefixes(int port)
+    public string Start()
     {
-        // 先尝试通配符绑定（probe 一次）
+        Log($"Start() 被调用，端口 {_port}");
+
+        // 第一步：尝试通配符 http://+:5000/（URL ACL 已注册，支持内网/模拟器访问）
+        _listener.Prefixes.Add($"http://+:{_port}/");
+        Log("已添加通配符前缀 http://+:" + _port + "/");
+
+        _cts = new CancellationTokenSource();
+
         try
         {
-            var probe = new HttpListener();
-            probe.Prefixes.Add($"http://*:{port}/");
-            probe.Start();
-            probe.Stop();
-            probe.Close();
-
-            // 通配符可用 → 正式 listener 也用通配符
-            _listener.Prefixes.Add($"http://*:{port}/");
-            BoundUrls.Add($"http://localhost:{port}");
-            foreach (var ip in WindowsNetworkHelper.GetSortedLanIPv4())
-                BoundUrls.Add($"http://{ip}:{port}");
-            return;
+            _listener.Start();
+            _useAllInterfaces = true;
+            Log("HttpListener.Start() 成功（通配符模式）");
         }
-        catch
+        catch (Exception ex1)
         {
-            // 通配符绑定失败（多半是 Windows URL ACL 限制）→ 走单 IP 绑定
-        }
+            // 通配符失败 → 清除 listener，只用 localhost
+            Log($"通配符模式启动失败: {ex1.Message}，回退到 localhost 模式");
+            _listener.Close();
 
-        // localhost / 127.0.0.1
-        _listener.Prefixes.Add($"http://localhost:{port}/");
-        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        BoundUrls.Add($"http://localhost:{port}");
+            var fallback = new HttpListener();
+            fallback.Prefixes.Add($"http://localhost:{_port}/");
+            Log("已添加 localhost 前缀");
 
-        // 所有局域网 IPv4（每个 IP 都单独绑定，绕开 URL ACL）
-        foreach (var ip in WindowsNetworkHelper.GetSortedLanIPv4())
-        {
+            _cts = new CancellationTokenSource();
+
             try
             {
-                _listener.Prefixes.Add($"http://{ip}:{port}/");
-                BoundUrls.Add($"http://{ip}:{port}");
+                fallback.Start();
+                Log("HttpListener.Start() 成功（localhost 模式）");
             }
-            catch
+            catch (Exception ex2)
             {
-                // 单个 IP 绑不上不致命
+                Log($"localhost 模式也启动失败: {ex2.Message}");
+                throw;
             }
-        }
-    }
 
-    public void Start()
-    {
-        _cts = new CancellationTokenSource();
-        _listener.Start();
+            _listener = fallback;
+            _useAllInterfaces = false;
+        }
+
         _listenTask = ListenLoop(_cts.Token);
+
+        var msg = _useAllInterfaces
+            ? $"localhost:{_port} + 所有网卡"
+            : $"localhost:{_port} (仅本机)";
+        Console.WriteLine($"✅ API 服务已启动: {msg}");
         if (!string.IsNullOrEmpty(_docsUrl))
             Console.WriteLine($"📖 API 文档: {_docsUrl}");
-        if (BoundUrls.Count > 0)
-        {
-            Console.WriteLine("✅ HTTP API 监听地址:");
-            foreach (var url in BoundUrls)
-                Console.WriteLine($"   {url}");
-        }
+        return msg;
     }
 
     public async Task StopAsync()
@@ -153,7 +255,22 @@ public class HttpServer
         var response = context.Response;
         try
         {
+            var remoteIp = context.Request.RemoteEndPoint?.Address;
             var path = context.Request.Url?.AbsolutePath ?? "/";
+            Log($"请求: {context.Request.HttpMethod} {path} 来源IP: {remoteIp}");
+
+            // 本机限制：只放行本机或虚拟网卡的请求
+            if (remoteIp != null)
+            {
+                var isLocal = IsLocalConnection(remoteIp);
+                Log($"IP检查: {remoteIp} IsLoopback={IPAddress.IsLoopback(remoteIp)} IsLocal={isLocal}");
+                if (!isLocal)
+                {
+                    Log($"拒绝非本机访问: {remoteIp}");
+                    SendResponse(response, 403, new { error = "forbidden", message = "仅允许本机访问" });
+                    return;
+                }
+            }
 
             // API 激活网关：所有 /api/ 路径需要卡密激活
             if (path.StartsWith("/api/") && path != "/docs")
@@ -188,6 +305,7 @@ public class HttpServer
         }
         catch (Exception ex)
         {
+            Log($"HTTP Error [{ex.GetType().Name}]: {ex.Message}");
             Console.WriteLine($"HTTP Error [{ex.GetType().Name}]: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
             try
