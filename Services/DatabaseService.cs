@@ -136,7 +136,7 @@ public class DatabaseService
         using var conn = new SqliteConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE (IsUsed=0 OR IsUsed IS NULL) AND (Allocated=0 OR Allocated IS NULL) ORDER BY Email ASC";
+        cmd.CommandText = "SELECT * FROM EmailAccounts WHERE (IsUsed=0 OR IsUsed IS NULL) AND (Allocated=0 OR Allocated IS NULL) AND Status='Verified' ORDER BY Email ASC";
         using var reader = cmd.ExecuteReader();
         // 遍历查询结果，逐行构建账号对象
         while (reader.Read())
@@ -287,7 +287,7 @@ public class DatabaseService
         using var conn = new SqliteConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM EmailAccounts WHERE IsUsed=0 AND Allocated=0";
+        cmd.CommandText = "SELECT COUNT(*) FROM EmailAccounts WHERE IsUsed=0 AND Allocated=0 AND Status='Verified'";
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
@@ -304,7 +304,7 @@ public class DatabaseService
         conn.Open();
         using var cmd = conn.CreateCommand();
         var offset = (page - 1) * pageSize;
-        cmd.CommandText = @"SELECT * FROM EmailAccounts WHERE IsUsed=0 AND Allocated=0 ORDER BY Email ASC LIMIT $limit OFFSET $offset";
+        cmd.CommandText = @"SELECT * FROM EmailAccounts WHERE IsUsed=0 AND Allocated=0 AND Status='Verified' ORDER BY Email ASC LIMIT $limit OFFSET $offset";
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", offset);
         using var reader = cmd.ExecuteReader();
