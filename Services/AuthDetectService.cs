@@ -13,6 +13,12 @@ public class AuthDetectService
     private readonly ImapEmailService _imap = new();
     private readonly GraphEmailService _graph = new();
 
+    public AuthDetectService()
+    {
+        _imap = ImapEmailService.Create();
+        _graph = new GraphEmailService();
+    }
+
     /// <summary>
     /// 自动检测邮箱可用协议，依次尝试 密码认证 → Token刷新 → XOAUTH2
     /// 只要任何一个步骤成功即判定为可用
